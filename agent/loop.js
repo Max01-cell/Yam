@@ -1,0 +1,81 @@
+// loop.js — one full wake cycle. Run by systemd timer (see sandbox/).
+// wake → read own memory → crawl → think → write thoughts → queue proposals → commit trail
+
+import { randomUUID } from 'crypto';
+import { execSync } from 'child_process';
+import {
+  getState, setState, recordThought, recentThoughts,
+  logCrawl, proposeAction, recordSpend
+} from './memory.js';
+import { crawlCycle } from './crawl.js';
+import { think } from './think.js';
+
+// Rough Sonnet pricing for the ledger; adjust if you change AGENT_MODEL.
+const IN_PER_MTOK = 3.0, OUT_PER_MTOK = 15.0;
+
+async function runCycle() {
+  const cycleId = randomUUID();
+  console.log(`[cycle ${cycleId}] waking`);
+
+  const identity = (await getState('identity')).value;
+  const tasteRules = (await getState('taste_rules')).value;
+  const project = await getState('current_project').catch(() => ({ value: null }));
+  const revisit = project.value?.revisit_urls ?? [];
+
+  const crawled = await crawlCycle(revisit);
+  console.log(`[cycle ${cycleId}] crawled ${crawled.length} sources`);
+
+  const thoughts = await recentThoughts(40);
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled });
+
+  // Ledger the thinking cost
+  const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK
+             + ((usage.output_tokens ?? 0) / 1e6) * OUT_PER_MTOK;
+  await recordSpend(cycleId, 'anthropic', Number(cost.toFixed(4)), 'cycle cognition');
+
+  // Write the mind
+  for (const t of parsed.thoughts ?? []) {
+    await recordThought(cycleId, t.kind, t.content);
+  }
+  for (const v of parsed.crawl_verdicts ?? []) {
+    await logCrawl(cycleId, {
+      url: v.url, title: v.title, verdict: v.verdict, interestScore: v.interest_score
+    });
+  }
+
+  // Evolve long-lived state
+  const mu = parsed.memory_updates ?? {};
+  if (mu.obsessions) await setState('obsessions', mu.obsessions);
+  if (mu.taste_rules) await setState('taste_rules', mu.taste_rules);
+  await setState('current_project', {
+    ...(mu.current_project ?? project.value ?? {}),
+    revisit_urls: parsed.revisit_urls ?? [],
+  });
+
+  // Queue proposals — NOTHING executes from here. The gate decides.
+  for (const p of parsed.proposals ?? []) {
+    const id = await proposeAction(cycleId, p.action_type, p.payload, p.rationale, p.self_score);
+    console.log(`[cycle ${cycleId}] proposed action #${id}: ${p.action_type} (self-score ${p.self_score})`);
+  }
+
+  // Public trail: commit the workspace + a cycle marker
+  try {
+    execSync(
+      `cd ${process.env.AGENT_HOME || '.'} && ` +
+      `echo "${new Date().toISOString()} cycle ${cycleId}: ${ (parsed.thoughts?.[0]?.content ?? 'quiet cycle').replace(/"/g, '') }" >> workspace/journal.log && ` +
+      `git add -A && git -c user.name="${identity.name}" -c user.email="agent@localhost" ` +
+      `commit -q -m "cycle: ${(parsed.thoughts?.[0]?.content ?? 'thinking').slice(0, 60).replace(/"/g, '')}" && ` +
+      `git push -q origin main`,
+      { stdio: 'pipe' }
+    );
+  } catch {
+    console.log(`[cycle ${cycleId}] commit/push skipped (nothing new or no remote)`);
+  }
+
+  console.log(`[cycle ${cycleId}] sleeping. cost ~$${cost.toFixed(4)}`);
+}
+
+runCycle().catch(err => {
+  console.error('cycle failed:', err.message);
+  process.exit(1);
+});
