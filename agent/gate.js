@@ -35,6 +35,14 @@ app.get('/mind/trail', async () => {
   return data ?? [];
 });
 
+app.get('/mind/creations', async () => {
+  const { data } = await supabase.from('creations')
+    .select('created_at, media_type, prompt, storage_path, self_score, posted')
+    .order('created_at', { ascending: false }).limit(24);
+  // storage_path → public URL is resolved client-side or via Supabase storage public bucket
+  return (data ?? []).map(c => ({ ...c, url: c.storage_path || null }));
+});
+
 app.get('/mind/ledger', async () => {
   const { data } = await supabase.from('spend_ledger')
     .select('created_at, service, amount_usd, detail')
