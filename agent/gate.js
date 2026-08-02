@@ -11,6 +11,12 @@ import { pendingActions, markAction } from './memory.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const app = Fastify({ logger: true });
+app.addHook('onSend', async (req, reply) => {
+  reply.header('access-control-allow-origin', '*');
+  reply.header('access-control-allow-headers', 'x-admin-token, content-type');
+  reply.header('access-control-allow-methods', 'GET, POST, OPTIONS');
+});
+app.options('/*', async (req, reply) => reply.code(204).send());
 const ADMIN = process.env.ADMIN_TOKEN;
 
 // ---------- PUBLIC: the mind, readable by anyone ----------
