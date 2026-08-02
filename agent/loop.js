@@ -21,8 +21,9 @@ async function runCycle() {
   const tasteRules = (await getState('taste_rules')).value;
   const project = await getState('current_project').catch(() => ({ value: null }));
   const revisit = project.value?.revisit_urls ?? [];
+  const diet = await getState('diet').catch(() => null);
 
-  const crawled = await crawlCycle(revisit);
+  const crawled = await crawlCycle(revisit, diet?.value?.feeds);
   console.log(`[cycle ${cycleId}] crawled ${crawled.length} sources`);
 
   const thoughts = await recentThoughts(40);
@@ -47,6 +48,12 @@ async function runCycle() {
   const mu = parsed.memory_updates ?? {};
   if (mu.obsessions) await setState('obsessions', mu.obsessions);
   if (mu.taste_rules) await setState('taste_rules', mu.taste_rules);
+  if (Array.isArray(mu.diet?.feeds)) {
+    const feeds = mu.diet.feeds
+      .filter(u => typeof u === 'string' && /^https?:\/\//.test(u))
+      .slice(0, 10);
+    if (feeds.length) await setState('diet', { feeds });
+  }
   await setState('current_project', {
     ...(mu.current_project ?? project.value ?? {}),
     revisit_urls: parsed.revisit_urls ?? [],

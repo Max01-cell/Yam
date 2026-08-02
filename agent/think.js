@@ -30,7 +30,8 @@ Respond ONLY with JSON matching:
                  "payload":{}, "rationale":"...", "self_score":0-100}]
 }
 Propose at most 2 actions per cycle. Most cycles should propose zero or one.
-Quality bar: only propose content you would score 80+. No filler.`;
+Quality bar: only propose content you would score 80+. No filler.
+You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle.`;
 }
 
 export async function think({ identity, tasteRules, recentThoughts, crawled }) {

@@ -3,11 +3,15 @@
 // marks executed/failed. If a handler isn't wired yet, it fails loudly
 // instead of pretending.
 
-import { approvedUnexecuted, markAction } from './memory.js';
+import { approvedUnexecuted, autonomousPending, markAction } from './memory.js';
 import { generateImage } from './venice.js';
 import { runSequence } from './video.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { execSync } from 'child_process';
+
+// In-sandbox actions self-execute from status='pending'. Outbound actions
+// (ig_post, token_launch, x402_spend) still require status='approved'.
+const AUTONOMOUS = ['site_update', 'venice_generate'];
 
 const HANDLERS = {
   // Agent redesigns its own home. Blast radius: its own site directory.
@@ -57,7 +61,8 @@ const HANDLERS = {
 };
 
 async function run() {
-  const actions = await approvedUnexecuted();
+  const combined = [...await approvedUnexecuted(), ...await autonomousPending(AUTONOMOUS)];
+  const actions = [...new Map(combined.map(a => [a.id, a])).values()];
   for (const a of actions) {
     const h = HANDLERS[a.action_type];
     try {
