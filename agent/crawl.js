@@ -3,9 +3,13 @@
 // Deliberately simple: fetch, strip, truncate. The thinking happens in think.js.
 
 const DEFAULT_FEEDS = [
-  'https://hnrss.org/frontpage',                 // Hacker News front page (RSS)
-  'https://www.reddit.com/r/InternetIsBeautiful/.json?limit=10',
+  'https://www.reddit.com/r/cinematography/.json?limit=10',
+  'https://www.reddit.com/r/Simulated/.json?limit=10',
   'https://www.reddit.com/r/generative/.json?limit=10',
+  'https://www.reddit.com/r/vfx/.json?limit=10',
+  'https://www.reddit.com/r/glitch_art/.json?limit=10',
+  'https://www.thisiscolossal.com/feed/',
+  'https://vimeo.com/channels/staffpicks/videos/rss',
 ];
 
 const UA = 'persona-agent/0.1 (autonomous art project; contact in repo)';
