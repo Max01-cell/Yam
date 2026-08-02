@@ -66,6 +66,12 @@ export async function approvedUnexecuted() {
   return data ?? [];
 }
 
+export async function autonomousPending(types) {
+  const { data } = await supabase.from('action_queue')
+    .select('*').eq('status', 'pending').in('action_type', types).order('created_at');
+  return data ?? [];
+}
+
 export async function markAction(id, status, result = null) {
   const patch = { status, result };
   if (status === 'approved' || status === 'rejected') patch.reviewed_at = new Date().toISOString();

@@ -2,7 +2,7 @@
 // v1: curated RSS/JSON feeds + any URLs the agent asked to revisit last cycle.
 // Deliberately simple: fetch, strip, truncate. The thinking happens in think.js.
 
-const DEFAULT_FEEDS = [
+export const DEFAULT_FEEDS = [
   'https://www.reddit.com/r/cinematography/.json?limit=10',
   'https://www.reddit.com/r/Simulated/.json?limit=10',
   'https://www.reddit.com/r/generative/.json?limit=10',
@@ -41,8 +41,8 @@ function stripToReadable(raw) {
 }
 
 // Returns [{ url, content }] — raw material for the mind.
-export async function crawlCycle(extraUrls = []) {
-  const targets = [...DEFAULT_FEEDS, ...extraUrls.slice(0, 5)];
+export async function crawlCycle(extraUrls = [], feeds) {
+  const targets = [...(feeds?.length ? feeds : DEFAULT_FEEDS), ...extraUrls.slice(0, 5)];
   const results = [];
   for (const url of targets) {
     const raw = await fetchText(url);
