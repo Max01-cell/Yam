@@ -5,6 +5,7 @@
 
 import { approvedUnexecuted, markAction } from './memory.js';
 import { generateImage } from './venice.js';
+import { runSequence } from './video.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { execSync } from 'child_process';
 
@@ -24,6 +25,12 @@ const HANDLERS = {
   async venice_generate(action) {
     const { prompt } = action.payload;
     return generateImage(action.cycle_id, prompt);
+  },
+
+  // Multi-clip Seedance sequence. payload: { concept, clips, clipSeconds, chainState }
+  // chainState.referenceImages should point at yam's canonical reference renders.
+  async video_pipeline(action) {
+    return runSequence(action.cycle_id, action.payload);
   },
 
   // Deliberately unwired. IG posting goes through the official Graph API on a

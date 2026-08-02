@@ -39,7 +39,7 @@ create table if not exists action_queue (
   created_at timestamptz not null default now(),
   cycle_id uuid not null,
   action_type text not null check (action_type in
-    ('ig_post','site_update','venice_generate','x402_spend','token_launch','other')),
+    ('ig_post','site_update','venice_generate','video_pipeline','x402_spend','token_launch','other')),
   payload jsonb not null,              -- everything needed to execute
   agent_rationale text,                -- why it wants to do this
   self_score int check (self_score between 0 and 100),
