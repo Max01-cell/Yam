@@ -14,7 +14,8 @@ const HANDLERS = {
   async site_update(action) {
     const dir = `${process.env.AGENT_HOME}/workspace/site`;
     mkdirSync(dir, { recursive: true });
-    const { path, content } = action.payload;
+    const path = action.payload.path || action.payload.location;
+    const { content } = action.payload;
     if (!path || typeof content !== 'string') throw new Error('site_update needs {path, content}');
     if (path.includes('..')) throw new Error('path traversal blocked');
     writeFileSync(`${dir}/${path}`, content);
