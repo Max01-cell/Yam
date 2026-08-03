@@ -7,6 +7,7 @@ import { approvedUnexecuted, autonomousPending, markAction } from './memory.js';
 import { generateImage } from './venice.js';
 import { runSequence } from './video.js';
 import { writeFileSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 import { execSync } from 'child_process';
 
 // In-sandbox actions self-execute from status='pending'. Outbound actions
@@ -17,12 +18,13 @@ const HANDLERS = {
   // Agent redesigns its own home. Blast radius: its own site directory.
   async site_update(action) {
     const dir = `${process.env.AGENT_HOME}/workspace/site`;
-    mkdirSync(dir, { recursive: true });
     const path = action.payload.path || action.payload.location;
     const { content } = action.payload;
     if (!path || typeof content !== 'string') throw new Error('site_update needs {path, content}');
     if (path.includes('..')) throw new Error('path traversal blocked');
-    writeFileSync(`${dir}/${path}`, content);
+    const target = `${dir}/${path}`;
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
     execSync(`cd ${process.env.AGENT_HOME} && git add -A && git commit -q -m "site: ${path}" && git push -q origin main`, { stdio: 'pipe' });
     return { wrote: path };
   },
