@@ -9,7 +9,10 @@ import { recordSpend, budgetRemaining } from './memory.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const VENICE_BASE = process.env.VENICE_BASE || 'https://api.venice.ai/api/v1';
-const IMAGE_MODEL = process.env.VENICE_IMAGE_MODEL || 'flux-dev';
+// flux-dev was retired by Venice. wai-Illustrious is anime/illustration-tuned,
+// which suits ink line work and screentone better than the photoreal flux line.
+// Alternatives worth trying via env: flux-2-pro, flux-2-max, z-image-turbo.
+const IMAGE_MODEL = process.env.VENICE_IMAGE_MODEL || 'wai-Illustrious';
 const IMAGE_EST_COST = Number(process.env.VENICE_IMAGE_COST || 0.02);
 
 function slugify(s) {

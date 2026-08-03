@@ -10,16 +10,36 @@ const VISION_EST_COST = 0.01;
 
 export async function look(cycleId, imageUrl, question) {
   if ((await budgetRemaining()) < VISION_EST_COST) throw new Error('budget exhausted for vision');
-  // Auto-rewrite Wikimedia file-description pages into scaled direct-file URLs.
-  let target = imageUrl;
-  const wm = imageUrl.match(/(?:commons|[a-z]+)\.(?:wikimedia|wikipedia)\.org\/wiki\/File:(.+)$/i);
-  if (wm) target = `https://commons.wikimedia.org/wiki/Special:FilePath/${wm[1]}?width=1600`;
-
-  const imgRes = await fetch(target, { headers: {
+  // Wikimedia URL handling. The /a/a5/ style segments in upload.wikimedia.org
+  // paths are MD5-hash prefixes of the filename — they cannot be recalled or
+  // guessed, only looked up. Special:FilePath/<Filename> resolves by filename
+  // alone with no hash, so it is the form that survives being remembered.
+  const UA = {
     'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) yam.garden art-study bot (contact: repo)',
     'accept': 'image/*,*/*;q=0.8',
-  } });
-  if (!imgRes.ok) throw new Error(`image fetch failed: HTTP ${imgRes.status} — the host refused; try a Wikimedia Commons file or a direct artist-posted image`);
+  };
+  const filePath = (name) =>
+    `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(decodeURIComponent(name))}?width=1600`;
+
+  let target = imageUrl;
+  // /wiki/File:Name — a description page
+  const wikiPage = imageUrl.match(/\.(?:wikimedia|wikipedia)\.org\/wiki\/File:(.+)$/i);
+  if (wikiPage) target = filePath(wikiPage[1]);
+
+  let imgRes = await fetch(target, { headers: UA });
+
+  // Hash-path miss: recover by filename alone. This is the common failure —
+  // a plausible remembered path with the wrong hash prefix.
+  if (!imgRes.ok) {
+    const upload = imageUrl.match(/upload\.wikimedia\.org\/.*\/([^/?#]+\.(?:jpe?g|png|webp|gif|svg))/i);
+    if (upload) {
+      const retry = filePath(upload[1]);
+      const second = await fetch(retry, { headers: UA });
+      if (second.ok) { imgRes = second; target = retry; }
+    }
+  }
+
+  if (!imgRes.ok) throw new Error(`image fetch failed: HTTP ${imgRes.status} for ${target} — for Wikimedia use https://commons.wikimedia.org/wiki/Special:FilePath/EXACT_File_Name.jpg?width=1600 (resolves by filename, no hash). Do not recall upload.wikimedia.org paths: the /a/a5/ segments are hashes and cannot be guessed. If unsure the file exists, look at something you found a real link to instead.`);
   const ctype = imgRes.headers.get('content-type') || 'image/jpeg';
   if (!ctype.startsWith('image/')) throw new Error(`not an image (got ${ctype.split(';')[0]}) — this URL is a webpage, not a file; use a direct .jpg/.png, or a Wikimedia File: page (auto-converted)`);
   const buf = Buffer.from(await imgRes.arrayBuffer());
