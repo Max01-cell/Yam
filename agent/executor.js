@@ -6,13 +6,14 @@
 import { approvedUnexecuted, autonomousPending, markAction } from './memory.js';
 import { generateImage } from './venice.js';
 import { runSequence } from './video.js';
+import { draw } from './draw.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { execSync } from 'child_process';
 
 // In-sandbox actions self-execute from status='pending'. Outbound actions
 // (ig_post, token_launch, x402_spend) still require status='approved'.
-const AUTONOMOUS = ['site_update', 'venice_generate', 'look'];
+const AUTONOMOUS = ['site_update', 'venice_generate', 'look', 'draw'];
 
 const HANDLERS = {
   // Agent redesigns its own home. Blast radius: its own site directory.
@@ -36,6 +37,12 @@ const HANDLERS = {
       execSync(`cd ${process.env.AGENT_HOME} && git add -A && git commit -q -m "study: ${(action.payload.prompt || '').slice(0, 60).replace(/"/g, '')}" && git push -q origin main`, { stdio: 'pipe' });
     } catch (e) { console.warn('study commit/push skipped:', e.message); }
     return result;
+  },
+
+  // yam draws by hand: it authors the SVG itself. Every mark is its decision.
+  async draw(action) {
+    const { title, svg, intent } = action.payload;
+    return draw(action.cycle_id, { title, svg, intent, selfScore: action.self_score ?? null });
   },
 
   async look(action) {
