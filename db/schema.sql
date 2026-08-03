@@ -39,7 +39,7 @@ create table if not exists action_queue (
   created_at timestamptz not null default now(),
   cycle_id uuid not null,
   action_type text not null check (action_type in
-    ('ig_post','site_update','venice_generate','video_pipeline','x402_spend','token_launch','other')),
+    ('ig_post','site_update','venice_generate','video_pipeline','look','x402_spend','token_launch','other')),
   payload jsonb not null,              -- everything needed to execute
   agent_rationale text,                -- why it wants to do this
   self_score int check (self_score between 0 and 100),
@@ -73,6 +73,17 @@ create table if not exists spend_ledger (
   detail text
 );
 
+-- Durable craft knowledge. The agent's permanent study notebook, shown back
+-- to it each cycle so learning compounds instead of resetting.
+create table if not exists study_notes (
+  id bigint generated always as identity primary key,
+  created_at timestamptz not null default now(),
+  topic text not null,
+  subject text,
+  content text not null,
+  refs bigint[] default '{}'
+);
+
 -- Seed the identity row so the first cycle has something to wake up to.
 insert into memory_state (key, value) values
   ('identity', '{"name": "UNNAMED", "seed": "to be written by the operator", "born": null}'),
@@ -84,3 +95,4 @@ on conflict (key) do nothing;
 create index if not exists thoughts_cycle_idx on thoughts (cycle_id);
 create index if not exists thoughts_kind_idx on thoughts (kind, created_at desc);
 create index if not exists queue_status_idx on action_queue (status, created_at);
+create index if not exists study_notes_topic_idx on study_notes (topic);
