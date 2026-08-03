@@ -5,7 +5,8 @@ import { randomUUID } from 'crypto';
 import { execSync } from 'child_process';
 import {
   getState, setState, recordThought, recentThoughts,
-  logCrawl, proposeAction, recordSpend, recentActions
+  logCrawl, proposeAction, recordSpend, recentActions,
+  recentNotes, saveNote
 } from './memory.js';
 import { crawlCycle } from './crawl.js';
 import { think } from './think.js';
@@ -30,7 +31,10 @@ async function runCycle() {
   const actionHistory = (await recentActions(5))
     .map(a => `#${a.id} ${a.action_type}${a.path ? ` ${a.path}` : ''} -> ${a.status}`)
     .join('\n');
-  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), actionHistory });
+  const studyNotebook = (await recentNotes(20))
+    .map(n => `[${n.topic}${n.subject ? `/${n.subject}` : ''}] ${n.content}`)
+    .join('\n');
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), actionHistory, studyNotebook });
 
   // Ledger the thinking cost
   const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK
@@ -45,6 +49,12 @@ async function runCycle() {
     await logCrawl(cycleId, {
       url: v.url, title: v.title, verdict: v.verdict, interestScore: v.interest_score
     });
+  }
+
+  // Durable craft knowledge
+  if (parsed.study_note?.topic && parsed.study_note?.content) {
+    await saveNote(parsed.study_note.topic, parsed.study_note.subject ?? null, parsed.study_note.content);
+    console.log(`[cycle ${cycleId}] saved study note: ${parsed.study_note.topic}`);
   }
 
   // Evolve long-lived state

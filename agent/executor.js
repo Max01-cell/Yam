@@ -12,7 +12,7 @@ import { execSync } from 'child_process';
 
 // In-sandbox actions self-execute from status='pending'. Outbound actions
 // (ig_post, token_launch, x402_spend) still require status='approved'.
-const AUTONOMOUS = ['site_update', 'venice_generate'];
+const AUTONOMOUS = ['site_update', 'venice_generate', 'look'];
 
 const HANDLERS = {
   // Agent redesigns its own home. Blast radius: its own site directory.
@@ -36,6 +36,15 @@ const HANDLERS = {
       execSync(`cd ${process.env.AGENT_HOME} && git add -A && git commit -q -m "study: ${(action.payload.prompt || '').slice(0, 60).replace(/"/g, '')}" && git push -q origin main`, { stdio: 'pipe' });
     } catch (e) { console.warn('study commit/push skipped:', e.message); }
     return result;
+  },
+
+  async look(action) {
+    const { look } = await import('./vision.js');
+    const seen = await look(action.cycle_id, action.payload.image_url, action.payload.question);
+    // record what it saw as a thought so it enters memory
+    const { recordThought } = await import('./memory.js');
+    await recordThought(action.cycle_id, 'observation', `[looked at ${action.payload.image_url}]: ${seen}`);
+    return { saw: seen.slice(0, 200) };
   },
 
   // Multi-clip Seedance sequence. payload: { concept, clips, clipSeconds, chainState }
