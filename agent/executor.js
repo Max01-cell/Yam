@@ -31,7 +31,11 @@ const HANDLERS = {
 
   async venice_generate(action) {
     const { prompt } = action.payload;
-    return generateImage(action.cycle_id, prompt);
+    const result = await generateImage(action.cycle_id, prompt);
+    try {
+      execSync(`cd ${process.env.AGENT_HOME} && git add -A && git commit -q -m "study: ${(action.payload.prompt || '').slice(0, 60).replace(/"/g, '')}" && git push -q origin main`, { stdio: 'pipe' });
+    } catch (e) { console.warn('study commit/push skipped:', e.message); }
+    return result;
   },
 
   // Multi-clip Seedance sequence. payload: { concept, clips, clipSeconds, chainState }

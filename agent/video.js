@@ -12,7 +12,8 @@
 //   carried state → ffmpeg concat at the end.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 import { execSync } from 'child_process';
 import { recordSpend, budgetRemaining } from './memory.js';
 
@@ -89,15 +90,112 @@ export async function writeClipPrompt({ concept, clipIndex, totalClips, duration
   return { yaml: yaml.trim(), meta: meta ? JSON.parse(meta) : null, costUsd: Number(cost.toFixed(4)) };
 }
 
-// ---- provider call: fill from Venice or Higgsfield docs before first run ----
-// Both expose Seedance 2.0. Reference-to-video carries @image refs; continuation
-// passes the previous clip as @video1. This stub is honest: it throws until wired.
-export async function generateClip({ yamlPrompt, referenceImages, previousClipPath, outPath }) {
-  throw new Error(
-    'generateClip not wired: fill from the Venice Seedance docs (or Higgsfield ' +
-    'route bytedance/seedance) — pass yamlPrompt as the prompt, referenceImages ' +
-    'as @image1.., previousClipPath as @video1, poll to completion, save to outPath.'
-  );
+// --- real Seedance 2.0 via Venice: quote -> queue -> poll retrieve ---
+// Verified: POST /video/quote (authoritative price), POST /video/queue -> queue_id,
+// POST /video/retrieve returns JSON {status} until done, then raw video/mp4 bytes.
+// R2V prompt grammar is canonical + case-sensitive: <Image 1>, <Video 1>.
+// STAGE 4 CAPABILITY (animating its own panels) — remains gated, not autonomous.
+
+function VENICE_BASE_V() { return process.env.VENICE_BASE || 'https://api.venice.ai/api/v1'; }
+
+async function veniceVideo(path, body) {
+  return fetch(`${VENICE_BASE_V()}/video/${path}`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${process.env.VENICE_API_KEY}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+async function quoteUsd(body) {
+  const res = await veniceVideo('quote', body);
+  if (!res.ok) throw new Error(`video quote failed: ${res.status} ${await res.text()}`);
+  const q = await res.json();
+  // Defensive parse — quote response field name not pinned in the docs excerpt we verified.
+  const usd = Number(q.usd ?? q.cost ?? q.price ?? q.amount_usd ?? q.total ?? NaN);
+  if (Number.isNaN(usd)) {
+    console.warn('quote shape unrecognized, falling back to estimate:', JSON.stringify(q).slice(0, 200));
+    return Number(process.env.VENICE_CLIP_EST_COST || 0.8);
+  }
+  return usd;
+}
+
+export async function generateClip({ cycleId, prompt, model = 'seedance-2-0-text-to-video',
+  durationSec = 5, resolution = '720p', aspectRatio = '16:9',
+  referenceImageUrls = [], referenceVideoUrls = [], referenceVideoTotalDuration = null,
+  outPath }) {
+
+  const body = { model, prompt, duration: `${durationSec}s`, resolution };
+  // I2V auto-derives aspect ratio and 400s if you send it (per docs)
+  if (!model.includes('image-to-video')) body.aspect_ratio = aspectRatio;
+  if (referenceImageUrls.length) body.reference_image_urls = referenceImageUrls;
+  if (referenceVideoUrls.length) {
+    body.reference_video_urls = referenceVideoUrls;
+    body.reference_video_total_duration =
+      referenceVideoTotalDuration ?? referenceVideoUrls.length * durationSec;
+  }
+
+  const price = await quoteUsd(body);
+  if ((await budgetRemaining()) < price) {
+    throw new Error(`budget insufficient: clip quoted at $${price.toFixed(2)}`);
+  }
+
+  const qres = await veniceVideo('queue', body);
+  if (qres.status === 409) {
+    throw new Error(`seedance consent required (human face in refs) — operator decision, not auto-attesting: ${await qres.text()}`);
+  }
+  if (!qres.ok) throw new Error(`video queue failed: ${qres.status} ${await qres.text()}`);
+  const { queue_id } = await qres.json();
+  if (!queue_id) throw new Error('queue returned no queue_id');
+
+  const deadline = Date.now() + 12 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 10_000));
+    const rres = await veniceVideo('retrieve', { model, queue_id });
+    const ctype = rres.headers.get('content-type') || '';
+    if (ctype.includes('video/mp4')) {
+      const buf = Buffer.from(await rres.arrayBuffer());
+      mkdirSync(dirname(outPath), { recursive: true });
+      writeFileSync(outPath, buf);
+      await recordSpend(cycleId, 'venice', price, `clip: ${prompt.slice(0, 70)}`);
+      return { outPath, priceUsd: price, queueId: queue_id };
+    }
+    const j = await rres.json().catch(() => ({}));
+    if (j.status === 'failed') throw new Error(`video generation failed: ${JSON.stringify(j).slice(0, 300)}`);
+    // queued | running -> keep polling
+  }
+  throw new Error('video generation timed out after 12 minutes');
+}
+
+// Native continuation — preferred over last-frame chaining.
+// Canonical grammar: "Extend <Video 1>, generate ..."
+export async function extendClip({ cycleId, previousClipUrl, previousClipDurationSec,
+  continuation, outPath, resolution = '720p' }) {
+  return generateClip({
+    cycleId,
+    model: 'seedance-2-0-reference-to-video',
+    prompt: `Extend <Video 1>, generate ${continuation}`,
+    referenceVideoUrls: [previousClipUrl],
+    referenceVideoTotalDuration: previousClipDurationSec,
+    resolution, outPath,
+  });
+}
+
+// Native join of 2-3 clips (combined input <= 15s).
+export async function stitchClips({ cycleId, clipUrls, transitions, totalDurationSec, outPath, resolution = '720p' }) {
+  if (clipUrls.length < 2 || clipUrls.length > 3) throw new Error('stitch takes 2-3 clips');
+  const parts = clipUrls.map((_, i) => `<Video ${i + 1}>`);
+  let prompt = parts[0];
+  for (let i = 1; i < parts.length; i++) {
+    prompt += ` + ${transitions?.[i - 1] || 'a smooth seamless cut'} + followed by ${parts[i]}`;
+  }
+  return generateClip({
+    cycleId, model: 'seedance-2-0-reference-to-video', prompt,
+    referenceVideoUrls: clipUrls, referenceVideoTotalDuration: totalDurationSec,
+    resolution, outPath,
+  });
 }
 
 // ---- chaining utilities (real, tested) ----
