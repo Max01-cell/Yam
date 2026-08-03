@@ -66,6 +66,16 @@ export async function approvedUnexecuted() {
   return data ?? [];
 }
 
+export async function recentActions(limit = 5) {
+  const { data } = await supabase.from('action_queue')
+    .select('id, action_type, status, created_at, payload')
+    .order('created_at', { ascending: false }).limit(limit);
+  return (data ?? []).map(r => ({
+    id: r.id, action_type: r.action_type, status: r.status,
+    created_at: r.created_at, path: r.payload?.path,
+  }));
+}
+
 export async function autonomousPending(types) {
   const { data } = await supabase.from('action_queue')
     .select('*').eq('status', 'pending').in('action_type', types).order('created_at');

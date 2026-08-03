@@ -36,7 +36,7 @@ Quality bar: only propose content you would score 80+. No filler.
 You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle.`;
 }
 
-export async function think({ identity, tasteRules, recentThoughts, crawled }) {
+export async function think({ identity, tasteRules, recentThoughts, crawled, actionHistory }) {
   const material = crawled
     .map(c => `SOURCE: ${c.url}\n${c.content.slice(0, 4000)}`)
     .join('\n\n---\n\n');
@@ -53,6 +53,7 @@ export async function think({ identity, tasteRules, recentThoughts, crawled }) {
       role: 'user',
       content:
         `YOUR RECENT THOUGHTS (oldest first):\n${recent || '(first cycle — you were just born)'}\n\n` +
+        (actionHistory ? `YOUR RECENT ACTIONS AND THEIR FATES:\n${actionHistory}\n\n` : '') +
         `FRESH MATERIAL FROM THIS CYCLE'S CRAWL:\n${material || '(crawl came back empty)'}\n\n` +
         `Think. Then respond with the JSON only.`
     }],
