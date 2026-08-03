@@ -11,15 +11,23 @@
 <link href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Spline+Sans+Mono:ital,wght@0,300..700;1,300..700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --soil:#000000;
-  --shade:#0A0D08;
-  --shade-2:#10150C;
-  --moss:#3E5C33;
-  --leaf:#7BA05B;
-  --chloro:#C9E6A2;
-  --bloom:#C287E8;
-  --bloom-dim:#8a5fae;
-  --hairline:rgba(123,160,91,.18);
+  --paper:#0a0a0a;         /* the page */
+  --ink:#f2efe6;           /* paper-white ink */
+  --ink-dim:#8b877e;       /* mid ink */
+  --ink-mute:#6a675f;      /* faded ink */
+  --ink-faint:#2e2e2c;     /* ghost pencil */
+  /* legacy token names — kept so yam's own markup keeps working, now monochrome */
+  --soil:#0a0a0a;
+  --shade:#131311;
+  --shade-2:#181815;
+  --moss:#6a675f;
+  --leaf:#8b877e;
+  --chloro:#f2efe6;
+  --bloom:#f2efe6;
+  --bloom-dim:#8b877e;
+  --root:#f2efe6;
+  --ube:#8b877e;
+  --hairline:rgba(242,241,234,.15);
 }
 *{margin:0;padding:0;box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -75,15 +83,15 @@ canvas.vines{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none
   color:var(--leaf);
   white-space:pre;
   flex-shrink:0;
-  text-shadow:0 0 2px rgba(201,230,162,.55),0 0 14px rgba(123,160,91,.55),0 0 34px rgba(62,92,51,.45);
+  text-shadow:0 0 2px rgba(242,239,230,.55),0 0 14px rgba(242,239,230,.55),0 0 34px rgba(242,239,230,.45);
   animation:breathe 5s ease-in-out infinite;
 }
 .yam-body b{color:var(--bloom);font-weight:inherit;
-  text-shadow:0 0 3px rgba(194,135,232,.9),0 0 16px rgba(194,135,232,.6)}
-.yam-body u{color:#9678B4;text-decoration:none;
-  text-shadow:0 0 3px rgba(150,120,180,.8),0 0 12px rgba(150,120,180,.45)}
+  text-shadow:0 0 3px rgba(242,239,230,.9),0 0 16px rgba(242,239,230,.6)}
+.yam-body u{color:var(--ink-dim);text-decoration:none;
+  text-shadow:0 0 3px rgba(242,239,230,.8),0 0 12px rgba(242,239,230,.45)}
 .yam-body i{color:var(--chloro);font-style:normal;
-  text-shadow:0 0 3px rgba(201,230,162,.9),0 0 12px rgba(201,230,162,.5)}
+  text-shadow:0 0 3px rgba(242,239,230,.9),0 0 12px rgba(242,239,230,.5)}
 @keyframes breathe{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.84;transform:scale(1.015)}}
 @media(max-width:860px){
   .hero{flex-direction:column;align-items:flex-start;gap:26px}
@@ -100,7 +108,7 @@ canvas.vines{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none
   color:var(--leaf);margin-bottom:18px;
 }
 .feed h2 .count{color:var(--moss)}
-.item{padding:12px 0;border-top:1px solid rgba(123,160,91,.10);font-size:13.5px}
+.item{padding:12px 0;border-top:1px solid rgba(242,239,230,.10);font-size:13.5px}
 .item:first-of-type{border-top:none}
 .item .k{color:var(--bloom-dim);font-size:11px;letter-spacing:.1em;text-transform:uppercase}
 .item .t{color:var(--chloro);margin-top:3px}
@@ -318,80 +326,234 @@ async function load(){
 load();
 setInterval(load, 90_000);
 
-/* ============ the signature: a page illustrating itself ============ */
-(function inkWorld(){
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const INK='232,228,216';      // pale paper-ink
-  const BLOOM='194,135,232';    // rare accent stroke
-  function engine(canvas,{bold}){
-    const ctx=canvas.getContext('2d');
-    let W,H,dpr;
-    function size(){
-      dpr=Math.min(devicePixelRatio||1,2);
-      W=canvas.width=innerWidth*dpr; H=canvas.height=innerHeight*dpr;
-      canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px';
-      ctx.fillStyle='rgba(0,0,0,1)'; ctx.fillRect(0,0,W,H);
-    }
-    size(); addEventListener('resize',size);
+/* ============ the signature: a manga page drafting itself ============ */
+(function mangaPage(){
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var back = document.getElementById('vinesBack');
+  var front = document.getElementById('vinesFront');
+  if(!back || !front) return;
+  var bctx = back.getContext('2d'), fctx = front.getContext('2d');
+  var W,H,dpr,t=0;
+  var INK='242,239,230', PAPER='#0a0a0a';
 
-    let strokes=[];
-    function newStroke(){
-      const ang=(Math.random()<.7? -0.5+Math.random()*0.5 : Math.random()*Math.PI*2); // favor sweeping diagonals
-      const len=(bold? 260+Math.random()*420 : 120+Math.random()*260)*dpr;
-      return {
-        x:Math.random()*W, y:Math.random()*H, ang,
-        len, drawn:0,
-        base:(bold? 4+Math.random()*9 : 1.2+Math.random()*3)*dpr,
-        curve:(Math.random()-.5)*.004,
-        accent:Math.random()<.06,
-        alpha:(bold? .5+Math.random()*.4 : .18+Math.random()*.25),
-        speed:(reduced? 1e9 : (3+Math.random()*5)*dpr),
-      };
-    }
-    function panelBorder(){
-      // a faint panel frame sketches in, one side at a time
-      const x=Math.random()*W*.7, y=Math.random()*H*.7;
-      const w=(140+Math.random()*300)*dpr, h=(100+Math.random()*220)*dpr;
-      ctx.strokeStyle=`rgba(${INK},.10)`; ctx.lineWidth=1.4*dpr; ctx.lineCap='butt';
-      ctx.strokeRect(x+ (Math.random()-.5)*3, y+(Math.random()-.5)*3, w, h);
-    }
-    for(let i=0;i<(bold?2:6);i++) strokes.push(newStroke());
+  function size(){
+    dpr=Math.min(devicePixelRatio||1,2);
+    [back,front].forEach(function(c){
+      c.width=innerWidth*dpr; c.height=innerHeight*dpr;
+      c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px';
+    });
+    W=back.width; H=back.height;
+    bctx.fillStyle=PAPER; bctx.fillRect(0,0,W,H);
+  }
+  size(); addEventListener('resize', function(){ size(); layout(); });
 
-    function frame(){
-      // ink slowly absorbs into the page
-      ctx.fillStyle='rgba(0,0,0,0.006)'; ctx.fillRect(0,0,W,H);
-      for(const s of strokes){
-        if(s.drawn>=s.len) continue;
-        const step=Math.min(s.speed, s.len-s.drawn);
-        const t0=s.drawn/s.len, t1=(s.drawn+step)/s.len;
-        // pressure profile: swell then taper, with hand jitter
-        const w0=s.base*Math.pow(Math.sin(Math.PI*t0+0.001),0.65)+(Math.random()-.5)*0.6*dpr;
-        const nx=s.x+Math.cos(s.ang)*step, ny=s.y+Math.sin(s.ang)*step;
-        ctx.strokeStyle=`rgba(${s.accent?BLOOM:INK},${s.alpha})`;
-        ctx.lineCap='round'; ctx.lineWidth=Math.max(.3*dpr,w0);
-        ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(nx,ny); ctx.stroke();
-        s.x=nx; s.y=ny; s.ang+=s.curve+(Math.random()-.5)*.01; s.drawn+=step;
-        if(s.drawn>=s.len){
-          // flick: ink splatter off the stroke's end
-          if(Math.random()<.5){
-            for(let d=0; d<3+Math.random()*4; d++){
-              const fa=s.ang+(Math.random()-.5)*.9, fd=(4+Math.random()*26)*dpr;
-              ctx.fillStyle=`rgba(${s.accent?BLOOM:INK},${s.alpha*.8})`;
-              ctx.beginPath();
-              ctx.arc(s.x+Math.cos(fa)*fd, s.y+Math.sin(fa)*fd, (0.5+Math.random()*1.6)*dpr, 0, 7);
-              ctx.fill();
-            }
-          }
-          if(!reduced) setTimeout(()=>{ Object.assign(s,newStroke()); }, 800+Math.random()*4000);
+  /* ---- page layout: horizontal tiers, panels inked right-to-left ---- */
+  var queue=[], holdUntil=0, fadeStart=0, phase='draft';
+  function makeLayout(){
+    var pad=24*dpr, gut=14*dpr, y=pad, out=[];
+    while(y < H-pad-60*dpr){
+      var splash = Math.random()<.12 && y < H*.5;
+      var tierH = splash ? H*(.30+Math.random()*.12) : H*(.15+Math.random()*.14);
+      tierH = Math.min(tierH, H-pad-y);
+      var count = splash ? 1 : 1+Math.floor(Math.random()*3);
+      var weights=[], sum=0, i;
+      for(i=0;i<count;i++){ var w=.6+Math.random(); weights.push(w); sum+=w; }
+      var x=pad, availW=W-pad*2-gut*(count-1);
+      var tier=[];
+      for(i=0;i<count;i++){
+        var pw=availW*(weights[i]/sum);
+        tier.push({x:x, y:y, w:pw, h:tierH, kind:pick(splash)});
+        x+=pw+gut;
+      }
+      tier.reverse();               /* manga reads right to left */
+      out=out.concat(tier);
+      y+=tierH+gut;
+    }
+    return out;
+  }
+  function pick(splash){
+    var k=['tone','speed','hatch','burst','spot','ma','tone','speed','hatch'];
+    if(splash) k=['burst','speed','spot','tone'];
+    return k[Math.floor(Math.random()*k.length)];
+  }
+  function layout(){
+    bctx.fillStyle=PAPER; bctx.fillRect(0,0,W,H);
+    var panels=makeLayout();
+    queue=panels.map(function(p,i){
+      return {p:p, delay:(reduced?0:i*12), border:0, fill:0, prog:0,
+              focx:p.x+p.w*(.3+Math.random()*.4), focy:p.y+p.h*(.3+Math.random()*.4),
+              grad:Math.random()<.5?1:-1, penciled:false, knocked:false, blobs:null};
+    });
+    phase='draft'; holdUntil=0; fadeStart=0;
+    if(reduced){
+      queue.forEach(function(q){ pencil(q); q.border=1; inkBorder(q,0,1); q.fill=1; fillStep(q,0,1); finish(q); });
+    }
+  }
+
+  /* ---- inking ---- */
+  function sides(p){ return [
+    [p.x,p.y,p.x+p.w,p.y],[p.x+p.w,p.y,p.x+p.w,p.y+p.h],
+    [p.x+p.w,p.y+p.h,p.x,p.y+p.h],[p.x,p.y+p.h,p.x,p.y]]; }
+  function pencil(q){
+    var p=q.p; bctx.strokeStyle='rgba('+INK+',.07)'; bctx.lineWidth=1*dpr;
+    bctx.strokeRect(p.x+(Math.random()-.5)*2, p.y+(Math.random()-.5)*2, p.w, p.h);
+    q.penciled=true;
+  }
+  function inkBorder(q, from, to){
+    var per=sides(q.p), total0=from*4, total1=to*4;
+    bctx.lineCap='round';
+    for(var s=0;s<4;s++){
+      var a=Math.max(0, Math.min(1, total1-s)), b=Math.max(0, Math.min(1, total0-s));
+      if(a<=b) continue;
+      var sd=per[s], x1=sd[0]+(sd[2]-sd[0])*b, y1=sd[1]+(sd[3]-sd[1])*b;
+      var over=(a>=1)?(3+Math.random()*3)*dpr:0;         /* corner overshoot */
+      var x2=sd[0]+(sd[2]-sd[0])*a, y2=sd[1]+(sd[3]-sd[1])*a;
+      if(over){ var L=Math.hypot(sd[2]-sd[0],sd[3]-sd[1])||1;
+        x2+= (sd[2]-sd[0])/L*over; y2+=(sd[3]-sd[1])/L*over; }
+      bctx.strokeStyle='rgba('+INK+',.6)';
+      bctx.lineWidth=(1.6+Math.random()*1.6)*dpr;
+      bctx.beginPath(); bctx.moveTo(x1,y1); bctx.lineTo(x2,y2); bctx.stroke();
+    }
+  }
+  function clipPanel(p){ bctx.save(); bctx.beginPath();
+    bctx.rect(p.x+3*dpr,p.y+3*dpr,p.w-6*dpr,p.h-6*dpr); bctx.clip(); }
+
+  /* ---- fills, drawn incrementally from prog a to b ---- */
+  function fillStep(q, a, b){
+    var p=q.p; clipPanel(p);
+    if(q.p.kind==='tone'){
+      var step=6.5*dpr, cols=Math.ceil(p.w/step);
+      for(var c=Math.floor(a*cols); c<Math.floor(b*cols); c++){
+        var cx=q.grad>0 ? p.x+c*step : p.x+p.w-c*step;
+        var density=.25+.5*(c/cols);
+        for(var yy=p.y; yy<p.y+p.h; yy+=step){
+          if(Math.random()>density) continue;
+          bctx.fillStyle='rgba('+INK+',.45)';
+          bctx.beginPath(); bctx.arc(cx, yy+(Math.random()-.5)*2, 1.05*dpr, 0, 7); bctx.fill();
         }
       }
-      if(Math.random()<.0015 && !bold) panelBorder();
-      if(!reduced) requestAnimationFrame(frame);
+    } else if(q.p.kind==='speed'){
+      var n0=Math.floor(a*70), n1=Math.floor(b*70);
+      bctx.strokeStyle='rgba('+INK+',.38)'; 
+      for(var i=n0;i<n1;i++){
+        var ang=(i/70)*Math.PI*2 + (i%2)*.02;
+        bctx.lineWidth=(.6+Math.random()*.9)*dpr;
+        var r1=Math.min(p.w,p.h)*.12;
+        bctx.beginPath();
+        bctx.moveTo(q.focx+Math.cos(ang)*r1, q.focy+Math.sin(ang)*r1);
+        bctx.lineTo(q.focx+Math.cos(ang)*p.w*1.2, q.focy+Math.sin(ang)*p.h*1.2);
+        bctx.stroke();
+      }
+    } else if(q.p.kind==='hatch'){
+      var sp=8*dpr, diag=p.w+p.h, m0, m1, k;
+      bctx.lineWidth=.9*dpr; bctx.strokeStyle='rgba('+INK+',.3)';
+      /* pass 1 fills 0-0.5 of prog; pass 2 (cross) fills 0.5-1 */
+      function pass(pa, pb, ang){
+        var lines=Math.ceil(diag/sp);
+        for(k=Math.floor(pa*lines); k<Math.floor(pb*lines); k++){
+          var off=k*sp;
+          bctx.beginPath();
+          bctx.moveTo(p.x-p.h*Math.cos(ang)+off, p.y+p.h);
+          bctx.lineTo(p.x+off+p.h*Math.cos(ang), p.y);
+          bctx.stroke();
+        }
+      }
+      m0=Math.min(a,.5)/.5; m1=Math.min(b,.5)/.5; if(m1>m0) pass(m0,m1,.55);
+      m0=Math.max(0,(a-.5)/.5); m1=Math.max(0,(b-.5)/.5); if(m1>m0) pass(m0,m1,-.62);
+    } else if(q.p.kind==='burst'){
+      var s0=Math.floor(a*34), s1=Math.floor(b*34), mn=Math.min(p.w,p.h);
+      for(var j=s0;j<s1;j++){
+        var ba=Math.random()*Math.PI*2;
+        bctx.strokeStyle='rgba('+INK+',.55)';
+        bctx.lineWidth=(1+Math.random()*2.4)*dpr;
+        bctx.beginPath();
+        bctx.moveTo(q.focx+Math.cos(ba)*mn*.16, q.focy+Math.sin(ba)*mn*.16);
+        bctx.lineTo(q.focx+Math.cos(ba)*mn*(.4+Math.random()*.25), q.focy+Math.sin(ba)*mn*(.4+Math.random()*.25));
+        bctx.stroke();
+      }
+    } else if(q.p.kind==='spot'){
+      if(!q.blobs){ q.blobs=[]; var nb=6+Math.floor(Math.random()*4);
+        for(var z=0;z<nb;z++) q.blobs.push({x:p.x+Math.random()*p.w, y:p.y+Math.random()*p.h,
+          r:(6+Math.random()*24)*dpr, a:.45+Math.random()*.35}); }
+      var b0=Math.floor(a*q.blobs.length), b1=Math.floor(b*q.blobs.length);
+      for(var v=b0; v<b1; v++){
+        var bl=q.blobs[v];
+        for(var e=0;e<4;e++){
+          bctx.fillStyle='rgba('+INK+','+bl.a+')';
+          bctx.beginPath();
+          bctx.ellipse(bl.x+(Math.random()-.5)*bl.r*.6, bl.y+(Math.random()-.5)*bl.r*.6,
+            bl.r*(.5+Math.random()*.5), bl.r*(.35+Math.random()*.4), Math.random()*3, 0, 7);
+          bctx.fill();
+        }
+        for(var d=0; d<6; d++){ /* dry-brush specks */
+          bctx.fillStyle='rgba('+INK+',.3)';
+          var da=Math.random()*Math.PI*2, dd=bl.r*(1+Math.random()*.5);
+          bctx.beginPath(); bctx.arc(bl.x+Math.cos(da)*dd, bl.y+Math.sin(da)*dd, .8*dpr, 0, 7); bctx.fill();
+        }
+      }
     }
-    if(reduced){ for(let i=0;i<200;i++) frame(); } else { requestAnimationFrame(frame); }
+    /* 'ma' draws nothing — emptiness on purpose */
+    bctx.restore();
   }
-  engine(document.getElementById('vinesBack'),{bold:false});
-  engine(document.getElementById('vinesFront'),{bold:true});
+  function finish(q){
+    if(q.p.kind==='burst' && !q.knocked){        /* white knockout core */
+      var mn=Math.min(q.p.w,q.p.h);
+      clipPanel(q.p);
+      bctx.fillStyle=PAPER;
+      bctx.beginPath(); bctx.arc(q.focx,q.focy,mn*.13,0,7); bctx.fill();
+      bctx.strokeStyle='rgba('+INK+',.6)'; bctx.lineWidth=1.4*dpr;
+      bctx.beginPath(); bctx.arc(q.focx,q.focy,mn*.13,0,7); bctx.stroke();
+      bctx.restore(); q.knocked=true;
+    }
+  }
+
+  /* ---- lifecycle ---- */
+  function frame(){
+    t++;
+    var allDone=true;
+    for(var i=0;i<queue.length;i++){
+      var q=queue[i];
+      if(q.delay>0){ q.delay--; allDone=false; continue; }
+      if(!q.penciled) pencil(q);
+      if(q.border<1){ var nb=Math.min(1,q.border+.05); inkBorder(q,q.border,nb); q.border=nb; allDone=false; }
+      else if(q.fill<1){ var nf=Math.min(1,q.fill+.012); fillStep(q,q.fill,nf); q.fill=nf; if(q.fill>=1) finish(q); allDone=false; }
+    }
+    if(allDone){
+      if(!holdUntil) holdUntil=t+430;                 /* let the page rest */
+      else if(t>holdUntil){
+        if(!fadeStart) fadeStart=t;
+        bctx.fillStyle='rgba(10,10,10,.05)'; bctx.fillRect(0,0,W,H);
+        if(t-fadeStart>95) layout();
+      }
+    }
+    if(!reduced) requestAnimationFrame(frame);
+  }
+
+  /* ---- front layer: drifting tone + registration marks ---- */
+  function frontLayer(){
+    if(t%2===0){
+      fctx.clearRect(0,0,front.width,front.height);
+      fctx.fillStyle='rgba('+INK+',.022)';
+      var step=10*dpr, off=(t*.12)%step, x, y;
+      for(y=-step;y<front.height+step;y+=step)
+        for(x=-step;x<front.width+step;x+=step){
+          fctx.beginPath(); fctx.arc(x+off,y+off,1*dpr,0,7); fctx.fill();
+        }
+      fctx.strokeStyle='rgba('+INK+',.12)'; fctx.lineWidth=1*dpr;
+      var m=16*dpr, L=8*dpr;
+      [[m,m],[front.width-m,m],[m,front.height-m],[front.width-m,front.height-m]]
+        .forEach(function(c){
+          fctx.beginPath(); fctx.moveTo(c[0]-L,c[1]); fctx.lineTo(c[0]+L,c[1]);
+          fctx.moveTo(c[0],c[1]-L); fctx.lineTo(c[0],c[1]+L); fctx.stroke();
+          fctx.beginPath(); fctx.arc(c[0],c[1],L*.55,0,7); fctx.stroke();
+        });
+    }
+    if(!reduced) requestAnimationFrame(frontLayer);
+  }
+
+  layout();
+  if(!reduced){ requestAnimationFrame(frame); requestAnimationFrame(frontLayer); }
+  else { frontLayer(); }
 })();
 </script>
 </body>
