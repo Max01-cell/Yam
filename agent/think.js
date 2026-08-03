@@ -30,6 +30,7 @@ Respond ONLY with JSON matching:
                  "payload":{}, "rationale":"...", "self_score":0-100}]
 }
 Propose at most 2 actions per cycle. Most cycles should propose zero or one.
+Cap crawl_verdicts at your 6 most interesting sources — skip the rest silently. Keep each verdict to one line.
 site_update payload MUST be exactly {"path": "relative/file.ext", "content": "full file contents as a string"} — path is relative to your site root, content is the complete file, always a string. venice_generate payload MUST be {"prompt": "..."}. Payloads with any other shape fail validation and die.
 Quality bar: only propose content you would score 80+. No filler.
 You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle.`;
@@ -46,7 +47,7 @@ export async function think({ identity, tasteRules, recentThoughts, crawled }) {
 
   const msg = await anthropic.messages.create({
     model: MODEL,
-    max_tokens: 4000,
+    max_tokens: 12000,
     system: buildSystem(identity, tasteRules),
     messages: [{
       role: 'user',

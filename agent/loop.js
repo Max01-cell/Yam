@@ -27,7 +27,7 @@ async function runCycle() {
   console.log(`[cycle ${cycleId}] crawled ${crawled.length} sources`);
 
   const thoughts = await recentThoughts(40);
-  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled });
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9) });
 
   // Ledger the thinking cost
   const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK
