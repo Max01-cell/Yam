@@ -16,7 +16,7 @@ function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
 }
 
-export async function generateImage(cycleId, prompt, { width = 1024, height = 1024 } = {}) {
+export async function generateImage(cycleId, prompt, { width = 1024, height = 1024, selfScore = null } = {}) {
   if ((await budgetRemaining()) < IMAGE_EST_COST) {
     throw new Error(`budget exhausted for image generation`);
   }
@@ -47,7 +47,7 @@ export async function generateImage(cycleId, prompt, { width = 1024, height = 10
 
   await recordSpend(cycleId, 'venice', IMAGE_EST_COST, `study: ${prompt.slice(0, 80)}`);
   await supabase.from('creations').insert({
-    cycle_id: cycleId, media_type: 'image', prompt,
+    cycle_id: cycleId, media_type: 'image', prompt, self_score: selfScore,
     storage_path: `https://yam.garden/${rel}`, posted: false,
   });
   return { rel, publicUrl: `https://yam.garden/${rel}` };
