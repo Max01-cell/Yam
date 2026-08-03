@@ -16,9 +16,15 @@ const WIKI_UA = {
   'accept': 'application/json',
 };
 
-export async function searchCommons(query, limit = 5) {
+// Only formats the vision API can actually read.
+const VIEWABLE = /^File:.+\.(jpe?g|png|webp|gif)$/i;
+
+async function searchOnce(query, limit) {
+  // Ask for more than we need: scans are often stored as PDF/DjVu/TIFF and get
+  // filtered out below, so a raw page of hits can reduce to nothing viewable.
+  const raw = Math.min(20, Math.max(limit * 4, 10));
   const api = `https://commons.wikimedia.org/w/api.php?action=query&list=search` +
-    `&srsearch=${encodeURIComponent(query)}&srnamespace=6&srlimit=${limit}&format=json&origin=*`;
+    `&srsearch=${encodeURIComponent(query)}&srnamespace=6&srlimit=${raw}&format=json&origin=*`;
   const res = await fetch(api, { headers: WIKI_UA });
   if (!res.ok) throw new Error(`commons search failed: HTTP ${res.status}`);
   const j = await res.json();
@@ -28,11 +34,27 @@ export async function searchCommons(query, limit = 5) {
   }
   return hits
     .map(h => String(h.title || ''))
-    .filter(t => /^File:.+\.(jpe?g|png|webp|gif)$/i.test(t))
+    .filter(t => VIEWABLE.test(t))
+    .slice(0, limit)
     .map(t => {
       const name = t.replace(/^File:/, '');
       return { title: t, name, url: `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(name)}?width=1600` };
     });
+}
+
+// Commons search matches every word, so a descriptive phrase finds nothing, and
+// a query that does hit often returns only PDF/DjVu scans. Widen in two steps:
+// bias to raster images, then drop back to the first few words.
+export async function searchCommons(query, limit = 5) {
+  const words = String(query || '').trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return [];
+  const attempts = [query, `${query} filetype:bitmap`];
+  if (words.length > 3) attempts.push(`${words.slice(0, 3).join(' ')} filetype:bitmap`);
+  for (const q of attempts) {
+    const hits = await searchOnce(q, limit);
+    if (hits.length) return hits;
+  }
+  return [];
 }
 
 export async function look(cycleId, imageUrl, question, searchQuery) {
@@ -57,7 +79,7 @@ export async function look(cycleId, imageUrl, question, searchQuery) {
 
   if (!target && searchQuery) {
     const hits = await searchCommons(searchQuery);
-    if (!hits.length) throw new Error(`commons search found no image files for "${searchQuery}" — try broader terms`);
+    if (!hits.length) throw new Error(`commons search found no image files for "${searchQuery}" — every word must match, so use two or three broad keywords like "Hokusai manga", not a descriptive phrase`);
     target = hits[0].url;
     substituted = `searched commons for "${searchQuery}" and studied ${hits[0].name}`;
   }
@@ -113,6 +135,8 @@ export async function look(cycleId, imageUrl, question, searchQuery) {
   let text = msg.content.filter(b => b.type === 'text').map(b => b.text).join('');
   if (substituted) text = `[${substituted}]\n\n${text}`;
   const cost = ((msg.usage?.input_tokens ?? 0)/1e6)*3 + ((msg.usage?.output_tokens ?? 0)/1e6)*15;
-  await recordSpend(cycleId, 'anthropic-vision', Number(cost.toFixed(4)), `look: ${imageUrl.slice(0,60)}`);
+  // imageUrl is undefined on the search-only path; this runs after the paid call,
+  // so throwing here would lose both the observation and the ledger row.
+  await recordSpend(cycleId, 'anthropic-vision', Number(cost.toFixed(4)), `look: ${String(imageUrl || searchQuery || target || '').slice(0,60)}`);
   return { text, url: target, substituted };
 }
