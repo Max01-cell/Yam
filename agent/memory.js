@@ -103,3 +103,23 @@ export async function budgetRemaining() {
   const { value } = await getState('budget');
   return Number(value.daily_cap_usd) - Number(value.spent_today || 0);
 }
+
+export async function saveNote(topic, subject, content) {
+  const { data, error } = await supabase.from('study_notes')
+    .insert({ topic, subject, content }).select('id').single();
+  if (error) throw new Error(`note save failed: ${error.message}`);
+  return data.id;
+}
+
+export async function searchNotes(topic, limit = 15) {
+  const { data } = await supabase.from('study_notes')
+    .select('created_at, topic, subject, content')
+    .ilike('topic', `%${topic}%`).order('created_at', { ascending: false }).limit(limit);
+  return data ?? [];
+}
+
+export async function recentNotes(limit = 20) {
+  const { data } = await supabase.from('study_notes')
+    .select('topic, subject, content').order('created_at', { ascending: false }).limit(limit);
+  return data ?? [];
+}

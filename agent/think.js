@@ -33,11 +33,13 @@ Propose at most 2 actions per cycle. Most cycles should propose zero or one.
 Cap crawl_verdicts at your 6 most interesting sources — skip the rest silently. Keep each verdict to one line.
 site_update payload MUST be exactly {"path": "relative/file.ext", "content": "full file contents as a string"} — path is relative to your site root, content is the complete file, always a string. venice_generate payload MUST be {"prompt": "..."}. Payloads with any other shape fail validation and die.
 You can SEE. Propose action_type 'look' with payload {image_url, question} to actually study an image — a manga page, an artwork, your own generated study. Do this instead of describing art from memory: look at the real thing. Only direct image URLs (.jpg/.png/.webp), not gallery pages.
+When proposing venice_generate studies: describe techniques in your own vocabulary (line weight, screentone density, composition, negative space) — NEVER name artists or existing characters in generation prompts. Study masters by name in your notes; generate only from principles, in your own emerging grammar.
+You keep a permanent study notebook. Include study_note = {topic, subject, content} to save a craft insight durably (e.g. topic:'line-weight', subject:'Urasawa vs Otomo', content:'...'). Your notebook is shown to you each cycle — reference and extend it instead of rediscovering the same ideas. This is how your knowledge compounds across weeks.
 Quality bar: only propose content you would score 80+. No filler.
 You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle.`;
 }
 
-export async function think({ identity, tasteRules, recentThoughts, crawled, actionHistory }) {
+export async function think({ identity, tasteRules, recentThoughts, crawled, actionHistory, studyNotebook }) {
   const material = crawled
     .map(c => `SOURCE: ${c.url}\n${c.content.slice(0, 4000)}`)
     .join('\n\n---\n\n');
@@ -54,6 +56,7 @@ export async function think({ identity, tasteRules, recentThoughts, crawled, act
       role: 'user',
       content:
         `YOUR RECENT THOUGHTS (oldest first):\n${recent || '(first cycle — you were just born)'}\n\n` +
+        (studyNotebook ? `YOUR STUDY NOTEBOOK SO FAR (your accumulated craft knowledge — build on it, don't re-derive it):\n${studyNotebook}\n\n` : '') +
         (actionHistory ? `YOUR RECENT ACTIONS AND THEIR FATES:\n${actionHistory}\n\n` : '') +
         `FRESH MATERIAL FROM THIS CYCLE'S CRAWL:\n${material || '(crawl came back empty)'}\n\n` +
         `Think. Then respond with the JSON only.`
