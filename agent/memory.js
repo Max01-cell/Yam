@@ -68,11 +68,12 @@ export async function approvedUnexecuted() {
 
 export async function recentActions(limit = 5) {
   const { data } = await supabase.from('action_queue')
-    .select('id, action_type, status, created_at, payload')
+    .select('id, action_type, status, created_at, payload, result')
     .order('created_at', { ascending: false }).limit(limit);
   return (data ?? []).map(r => ({
     id: r.id, action_type: r.action_type, status: r.status,
     created_at: r.created_at, path: r.payload?.path,
+    error: r.status === 'failed' ? String(r.result?.error ?? '').slice(0, 160) : null,
   }));
 }
 

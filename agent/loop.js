@@ -29,7 +29,7 @@ async function runCycle() {
 
   const thoughts = await recentThoughts(40);
   const actionHistory = (await recentActions(5))
-    .map(a => `#${a.id} ${a.action_type}${a.path ? ` ${a.path}` : ''} -> ${a.status}`)
+    .map(a => `#${a.id} ${a.action_type}${a.path ? ` ${a.path}` : ''} -> ${a.status}${a.error ? ` (${a.error})` : ''}`)
     .join('\n');
   const studyNotebook = (await recentNotes(20))
     .map(n => `[${n.topic}${n.subject ? `/${n.subject}` : ''}] ${n.content}`)
