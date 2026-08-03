@@ -8,38 +8,96 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const VISION_MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-6';
 const VISION_EST_COST = 0.01;
 
-export async function look(cycleId, imageUrl, question) {
+// Commons search: the durable answer to fabricated filenames. yam does not have
+// to remember an identifier correctly — it names a subject and gets real files.
+// MediaWiki Action API: list=search over namespace 6 (File:).
+const WIKI_UA = {
+  'user-agent': 'yam.garden art-study bot (autonomous art project; contact in repo)',
+  'accept': 'application/json',
+};
+
+export async function searchCommons(query, limit = 5) {
+  const api = `https://commons.wikimedia.org/w/api.php?action=query&list=search` +
+    `&srsearch=${encodeURIComponent(query)}&srnamespace=6&srlimit=${limit}&format=json&origin=*`;
+  const res = await fetch(api, { headers: WIKI_UA });
+  if (!res.ok) throw new Error(`commons search failed: HTTP ${res.status}`);
+  const j = await res.json();
+  const hits = j?.query?.search;
+  if (!Array.isArray(hits)) {
+    throw new Error(`commons search returned an unexpected shape: ${JSON.stringify(j).slice(0, 200)}`);
+  }
+  return hits
+    .map(h => String(h.title || ''))
+    .filter(t => /^File:.+\.(jpe?g|png|webp|gif)$/i.test(t))
+    .map(t => {
+      const name = t.replace(/^File:/, '');
+      return { title: t, name, url: `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(name)}?width=1600` };
+    });
+}
+
+export async function look(cycleId, imageUrl, question, searchQuery) {
   if ((await budgetRemaining()) < VISION_EST_COST) throw new Error('budget exhausted for vision');
-  // Wikimedia URL handling. The /a/a5/ style segments in upload.wikimedia.org
-  // paths are MD5-hash prefixes of the filename — they cannot be recalled or
-  // guessed, only looked up. Special:FilePath/<Filename> resolves by filename
-  // alone with no hash, so it is the form that survives being remembered.
+  // Resolution chain. yam may name a subject instead of a URL; and a URL that
+  // 404s is recovered by filename, then by search — because the usual failure
+  // is not a wrong hash but an invented filename.
   const UA = {
     'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) yam.garden art-study bot (contact: repo)',
     'accept': 'image/*,*/*;q=0.8',
   };
   const filePath = (name) =>
     `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(decodeURIComponent(name))}?width=1600`;
+  const wordsFrom = (u) => {
+    const base = (u.match(/([^/?#]+)\.(?:jpe?g|png|webp|gif|svg)/i) || [, ''])[1];
+    return base.replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim();
+  };
 
   let target = imageUrl;
-  // /wiki/File:Name — a description page
-  const wikiPage = imageUrl.match(/\.(?:wikimedia|wikipedia)\.org\/wiki\/File:(.+)$/i);
+  let substituted = null;
+  let imgRes = null;
+
+  if (!target && searchQuery) {
+    const hits = await searchCommons(searchQuery);
+    if (!hits.length) throw new Error(`commons search found no image files for "${searchQuery}" — try broader terms`);
+    target = hits[0].url;
+    substituted = `searched commons for "${searchQuery}" and studied ${hits[0].name}`;
+  }
+  if (!target) throw new Error('look needs either image_url or search');
+
+  // /wiki/File:Name description pages resolve straight to the file
+  const wikiPage = target.match(/\.(?:wikimedia|wikipedia)\.org\/wiki\/File:(.+)$/i);
   if (wikiPage) target = filePath(wikiPage[1]);
 
-  let imgRes = await fetch(target, { headers: UA });
+  imgRes = await fetch(target, { headers: UA });
 
-  // Hash-path miss: recover by filename alone. This is the common failure —
-  // a plausible remembered path with the wrong hash prefix.
-  if (!imgRes.ok) {
-    const upload = imageUrl.match(/upload\.wikimedia\.org\/.*\/([^/?#]+\.(?:jpe?g|png|webp|gif|svg))/i);
-    if (upload) {
-      const retry = filePath(upload[1]);
+  // 1st recovery: right filename, wrong hash path
+  if (!imgRes.ok && /upload\.wikimedia\.org/i.test(imageUrl || '')) {
+    const base = (imageUrl.match(/([^/?#]+\.(?:jpe?g|png|webp|gif|svg))/i) || [])[1];
+    if (base) {
+      const retry = filePath(base);
       const second = await fetch(retry, { headers: UA });
-      if (second.ok) { imgRes = second; target = retry; }
+      if (second.ok) { imgRes = second; target = retry; substituted = `recovered by filename via Special:FilePath`; }
     }
   }
 
-  if (!imgRes.ok) throw new Error(`image fetch failed: HTTP ${imgRes.status} for ${target} — for Wikimedia use https://commons.wikimedia.org/wiki/Special:FilePath/EXACT_File_Name.jpg?width=1600 (resolves by filename, no hash). Do not recall upload.wikimedia.org paths: the /a/a5/ segments are hashes and cannot be guessed. If unsure the file exists, look at something you found a real link to instead.`);
+  // 2nd recovery: the filename itself was invented — search for the subject
+  if (!imgRes.ok) {
+    const q = searchQuery || wordsFrom(imageUrl || '');
+    if (q) {
+      try {
+        const hits = await searchCommons(q);
+        if (hits.length) {
+          const third = await fetch(hits[0].url, { headers: UA });
+          if (third.ok) {
+            imgRes = third; target = hits[0].url;
+            substituted = `"${imageUrl}" does not exist on commons; searched "${q}" and studied ${hits[0].name} instead`;
+          }
+        }
+      } catch (e) { /* fall through to the error below */ }
+    }
+  }
+
+  if (!imgRes.ok) throw new Error(`could not resolve an image for ${imageUrl || searchQuery} (HTTP ${imgRes.status}). Do not recall wikimedia filenames — they are usually invented. Instead propose look with payload {search: "subject you want to see", question} and a real file will be found for you.`);
+
   const ctype = imgRes.headers.get('content-type') || 'image/jpeg';
   if (!ctype.startsWith('image/')) throw new Error(`not an image (got ${ctype.split(';')[0]}) — this URL is a webpage, not a file; use a direct .jpg/.png, or a Wikimedia File: page (auto-converted)`);
   const buf = Buffer.from(await imgRes.arrayBuffer());
@@ -52,8 +110,9 @@ export async function look(cycleId, imageUrl, question) {
       { type: 'text', text: question || 'You are yam, studying to become a mangaka. Look at this image as a student of the craft. Describe what you actually see: line weight, paneling, composition, use of blacks and negative space, how the drawing controls the eye. Be specific about technique, not vibes.' },
     ]}],
   });
-  const text = msg.content.filter(b => b.type === 'text').map(b => b.text).join('');
+  let text = msg.content.filter(b => b.type === 'text').map(b => b.text).join('');
+  if (substituted) text = `[${substituted}]\n\n${text}`;
   const cost = ((msg.usage?.input_tokens ?? 0)/1e6)*3 + ((msg.usage?.output_tokens ?? 0)/1e6)*15;
   await recordSpend(cycleId, 'anthropic-vision', Number(cost.toFixed(4)), `look: ${imageUrl.slice(0,60)}`);
-  return text;
+  return { text, url: target, substituted };
 }

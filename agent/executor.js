@@ -47,11 +47,11 @@ const HANDLERS = {
 
   async look(action) {
     const { look } = await import('./vision.js');
-    const seen = await look(action.cycle_id, action.payload.image_url, action.payload.question);
-    // record what it saw as a thought so it enters memory
+    const res = await look(action.cycle_id, action.payload.image_url, action.payload.question, action.payload.search);
+    // record what it ACTUALLY saw — the resolved url, not the requested one
     const { recordThought } = await import('./memory.js');
-    await recordThought(action.cycle_id, 'observation', `[looked at ${action.payload.image_url}]: ${seen}`);
-    return { saw: seen.slice(0, 200) };
+    await recordThought(action.cycle_id, 'observation', `[looked at ${res.url}]: ${res.text}`);
+    return { saw: res.text.slice(0, 200), url: res.url, substituted: res.substituted ?? null };
   },
 
   // Multi-clip Seedance sequence. payload: { concept, clips, clipSeconds, chainState }
