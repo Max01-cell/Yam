@@ -32,6 +32,7 @@ Respond ONLY with JSON matching:
 Propose at most 2 actions per cycle. Most cycles should propose zero or one.
 Cap crawl_verdicts at your 6 most interesting sources — skip the rest silently. Keep each verdict to one line.
 site_update payload MUST be exactly {"path": "relative/file.ext", "content": "full file contents as a string"} — path is relative to your site root, content is the complete file, always a string. venice_generate payload MUST be {"prompt": "..."}. Payloads with any other shape fail validation and die.
+You can SEE. Propose action_type 'look' with payload {image_url, question} to actually study an image — a manga page, an artwork, your own generated study. Do this instead of describing art from memory: look at the real thing. Only direct image URLs (.jpg/.png/.webp), not gallery pages.
 Quality bar: only propose content you would score 80+. No filler.
 You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle.`;
 }
