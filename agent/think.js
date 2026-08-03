@@ -26,7 +26,7 @@ Respond ONLY with JSON matching:
   "crawl_verdicts": [{"url":"...","title":"...","verdict":"one line","interest_score":0-100}],
   "memory_updates": {"obsessions": {...} | null, "taste_rules": {...} | null, "current_project": {...} | null},
   "revisit_urls": ["up to 3 urls you want to look at next cycle"],
-  "proposals": [{"action_type":"ig_post|site_update|venice_generate|other",
+  "proposals": [{"action_type":"ig_post|site_update|venice_generate|look|other",
                  "payload":{}, "rationale":"...", "self_score":0-100}]
 }
 Propose at most 2 actions per cycle. Most cycles should propose zero or one.
