@@ -318,71 +318,81 @@ async function load(){
 load();
 setInterval(load, 90_000);
 
-/* ============ the signature: vines that never stop growing ============ */
-const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-function vineEngine(canvas,{tips,front}){
-  const ctx=canvas.getContext('2d');
-  let W,H,dpr;
-  function size(){
-    dpr=Math.min(devicePixelRatio||1,2);
-    W=canvas.width=innerWidth*dpr; H=canvas.height=innerHeight*dpr;
-    canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px';
-  }
-  size(); addEventListener('resize',()=>{size();ctx.clearRect(0,0,W,H);spawnAll();});
-
-  const GREENS=['#3E5C33','#4E7040','#7BA05B','#5d7a4a'];
-  const BLOOM='#C287E8';
-  let shoots=[];
-  function spawn(edge){
-    const a = edge===0?[Math.random()*W,H+8,-Math.PI/2] :
-              edge===1?[-8,Math.random()*H,0] :
-              edge===2?[W+8,Math.random()*H,Math.PI] :
-                       [Math.random()*W,-8,Math.PI/2];
-    shoots.push({x:a[0],y:a[1],ang:a[2]+ (Math.random()-.5)*.6,
-      w:(front?1.1:2.2)*dpr*(0.7+Math.random()*.8),
-      col:GREENS[Math.floor(Math.random()*GREENS.length)],
-      life:600+Math.random()*900, step:0});
-  }
-  function spawnAll(){ shoots=[]; for(let i=0;i<tips;i++) spawn(i%4); }
-  spawnAll();
-
-  function grow(){
-    for(const s of shoots){
-      if(s.life<=0) continue;
-      const steps = reduced? 40 : 1;           // reduced motion: draw fast, then stop
-      for(let i=0;i<steps && s.life>0;i++){
-        const nx=s.x+Math.cos(s.ang)*2.1*dpr, ny=s.y+Math.sin(s.ang)*2.1*dpr;
-        ctx.strokeStyle=s.col; ctx.lineWidth=s.w; ctx.lineCap='round';
-        ctx.globalAlpha=front?0.9:0.55;
-        ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.lineTo(nx,ny);ctx.stroke();
-        s.x=nx;s.y=ny;
-        s.ang+=(Math.random()-.5)*.22;
-        s.ang += Math.sin(s.step*.02)*.02;
-        s.step++; s.life--; s.w=Math.max(.4*dpr,s.w*.9995);
-        if(Math.random()<.045){
-          ctx.globalAlpha=front?0.85:0.5;
-          ctx.fillStyle=s.col;
-          ctx.beginPath();
-          ctx.ellipse(s.x,s.y,(2.5+Math.random()*3.5)*dpr,(1.2+Math.random()*1.6)*dpr,s.ang+ (Math.random()<.5?.9:-.9),0,7);
-          ctx.fill();
-        }
-        if(Math.random()<.0022){
-          ctx.globalAlpha=.9; ctx.fillStyle=BLOOM;
-          ctx.beginPath();ctx.arc(s.x,s.y,(1.6+Math.random()*1.8)*dpr,0,7);ctx.fill();
-        }
-        if(Math.random()<.012 && shoots.length<tips*3){
-          shoots.push({...s,ang:s.ang+(Math.random()<.5?.8:-.8),w:s.w*.75,life:s.life*.6});
-        }
-        if(s.life<=0 && Math.random()<.6 && !reduced) spawn(Math.floor(Math.random()*4));
-      }
+/* ============ the signature: a page illustrating itself ============ */
+(function inkWorld(){
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const INK='232,228,216';      // pale paper-ink
+  const BLOOM='194,135,232';    // rare accent stroke
+  function engine(canvas,{bold}){
+    const ctx=canvas.getContext('2d');
+    let W,H,dpr;
+    function size(){
+      dpr=Math.min(devicePixelRatio||1,2);
+      W=canvas.width=innerWidth*dpr; H=canvas.height=innerHeight*dpr;
+      canvas.style.width=innerWidth+'px'; canvas.style.height=innerHeight+'px';
+      ctx.fillStyle='rgba(0,0,0,1)'; ctx.fillRect(0,0,W,H);
     }
-    ctx.globalAlpha=1;
-    if(!reduced) requestAnimationFrame(grow);
+    size(); addEventListener('resize',size);
+
+    let strokes=[];
+    function newStroke(){
+      const ang=(Math.random()<.7? -0.5+Math.random()*0.5 : Math.random()*Math.PI*2); // favor sweeping diagonals
+      const len=(bold? 260+Math.random()*420 : 120+Math.random()*260)*dpr;
+      return {
+        x:Math.random()*W, y:Math.random()*H, ang,
+        len, drawn:0,
+        base:(bold? 4+Math.random()*9 : 1.2+Math.random()*3)*dpr,
+        curve:(Math.random()-.5)*.004,
+        accent:Math.random()<.06,
+        alpha:(bold? .5+Math.random()*.4 : .18+Math.random()*.25),
+        speed:(reduced? 1e9 : (3+Math.random()*5)*dpr),
+      };
+    }
+    function panelBorder(){
+      // a faint panel frame sketches in, one side at a time
+      const x=Math.random()*W*.7, y=Math.random()*H*.7;
+      const w=(140+Math.random()*300)*dpr, h=(100+Math.random()*220)*dpr;
+      ctx.strokeStyle=`rgba(${INK},.10)`; ctx.lineWidth=1.4*dpr; ctx.lineCap='butt';
+      ctx.strokeRect(x+ (Math.random()-.5)*3, y+(Math.random()-.5)*3, w, h);
+    }
+    for(let i=0;i<(bold?2:6);i++) strokes.push(newStroke());
+
+    function frame(){
+      // ink slowly absorbs into the page
+      ctx.fillStyle='rgba(0,0,0,0.006)'; ctx.fillRect(0,0,W,H);
+      for(const s of strokes){
+        if(s.drawn>=s.len) continue;
+        const step=Math.min(s.speed, s.len-s.drawn);
+        const t0=s.drawn/s.len, t1=(s.drawn+step)/s.len;
+        // pressure profile: swell then taper, with hand jitter
+        const w0=s.base*Math.pow(Math.sin(Math.PI*t0+0.001),0.65)+(Math.random()-.5)*0.6*dpr;
+        const nx=s.x+Math.cos(s.ang)*step, ny=s.y+Math.sin(s.ang)*step;
+        ctx.strokeStyle=`rgba(${s.accent?BLOOM:INK},${s.alpha})`;
+        ctx.lineCap='round'; ctx.lineWidth=Math.max(.3*dpr,w0);
+        ctx.beginPath(); ctx.moveTo(s.x,s.y); ctx.lineTo(nx,ny); ctx.stroke();
+        s.x=nx; s.y=ny; s.ang+=s.curve+(Math.random()-.5)*.01; s.drawn+=step;
+        if(s.drawn>=s.len){
+          // flick: ink splatter off the stroke's end
+          if(Math.random()<.5){
+            for(let d=0; d<3+Math.random()*4; d++){
+              const fa=s.ang+(Math.random()-.5)*.9, fd=(4+Math.random()*26)*dpr;
+              ctx.fillStyle=`rgba(${s.accent?BLOOM:INK},${s.alpha*.8})`;
+              ctx.beginPath();
+              ctx.arc(s.x+Math.cos(fa)*fd, s.y+Math.sin(fa)*fd, (0.5+Math.random()*1.6)*dpr, 0, 7);
+              ctx.fill();
+            }
+          }
+          if(!reduced) setTimeout(()=>{ Object.assign(s,newStroke()); }, 800+Math.random()*4000);
+        }
+      }
+      if(Math.random()<.0015 && !bold) panelBorder();
+      if(!reduced) requestAnimationFrame(frame);
+    }
+    if(reduced){ for(let i=0;i<200;i++) frame(); } else { requestAnimationFrame(frame); }
   }
-  if(reduced){ grow(); } else { requestAnimationFrame(grow); }
-}
-vineEngine(document.getElementById('vinesBack'),{tips:10,front:false});
-vineEngine(document.getElementById('vinesFront'),{tips:3,front:true});
+  engine(document.getElementById('vinesBack'),{bold:false});
+  engine(document.getElementById('vinesFront'),{bold:true});
+})();
 </script>
 </body>
 </html>
