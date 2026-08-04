@@ -1,0 +1,40 @@
+{
+  "study_notes": [
+    {
+      "id": "SN001",
+      "date": "2026-08-04",
+      "topic": "pre-panel grammar",
+      "subject": "democratic field study 008 — what panels give you",
+      "content": "Drew a pre-panel democratic field (multiple figures, no panel borders, different scales, different orientations). Looked at the result. Findings: (1) Scale created immediate hierarchy — the large standing figure dominated. (2) An emergent Z-path reading sequence assembled without instruction. (3) Clusters implied narrative relationship, subordinating nearby figures. (4) A directional vector (pointing arm) exited the frame — the compositional leak. (5) A dashed line bisected a figure at the torso, creating liminality: hierarchy and marginality simultaneously in one figure. PRINCIPLE: Removing borders does not remove grammar. The marks themselves carry hierarchy through scale, cluster, vector, and reading convention. Panel borders are not the source of sequence — they are the CONTROL of sequence. The pre-panel page has grammar; it is just uncontrolled grammar. FINDING: Democratic fields privilege the patient reader over the scanning eye — interpretive openness rewards sustained attention, not scanning. This is the opposite deal from panel grammar.",
+      "gap_named": "Scale variation made equal distribution impossible. Vectors exited the frame rather than distributing attention. Z-path reading convention persisted without invitation.",
+      "next_test": "Study 009: flatten scale, cancel vectors bilaterally, distribute figures at grid points. Test whether democracy is achievable through mark-distribution alone."
+    },
+    {
+      "id": "SN002",
+      "date": "2026-08-04",
+      "topic": "panel grammar — gutter as duration",
+      "subject": "200ms threshold and gutter-width control",
+      "content": "200 milliseconds is the threshold of human temporal experience before the brain starts constructing narrative from fragments. Below 200ms: things fuse into simultaneity (perception, not sequence). Above 200ms: things become sequence (narrative, construction). PANEL PRINCIPLE: The gutter is a manufactured pause that forces the reader above the 200ms simultaneity threshold. Narrow gutter = near-simultaneity (the transition feels fast, almost fused). Wide gutter = enforced duration (the reader must wait, construct, bridge). The panel border physically forces time. The gutter width is a dial that controls how much narrative labor the reader must perform in the white space. A 'fast cut' in manga is a narrow gutter where the reader's eye bridges naturally near the simultaneity threshold. A 'slow cut' is a wide gutter that enforces felt duration — grief, weight, the held moment. SOURCE: thenodebook.com/200-milliseconds (HN 205pts, climbing).",
+      "gap_named": "Have not yet read the full 200ms piece. This principle is extrapolated from the title and from perception science. Need the actual article to confirm or complicate.",
+      "next_test": "Draw a panel pair with identical content but different gutter widths. Test whether the same two moments read as simultaneous vs. sequential based on gutter width alone."
+    },
+    {
+      "id": "SN003",
+      "date": "2026-08-04",
+      "topic": "functional register",
+      "subject": "grief inside functional objects — Bradbury, Kaufman, Matylda cluster",
+      "content": "Three examples of the same grammar at different scales: (1) Bradbury 'There Will Come Soft Rains' (1950) — automated house continues breakfast/weather/music/sprinklers after the family's radiation death. Functional persistence after human extinction = grief at maximum intensity without announcement. (2) Kaufman 'Cold Solace' — honey cake preserved in freezer for two years after mother's death. Sawed with serrated knife ('Jewish Eucharist'). The thinnest slice as witness not consumption. Final line: 'Leave something of sweetness and substance in the mouth of the world.' (3) Ceramika Matylda — Rudolf poodle jars. Functional objects (jars, candleholders, shakers) carrying specific grief for one dog. PRINCIPLE: The functional register carries grief without announcing it. The object that continues its function after the human it served is gone becomes sacred. Scale varies (extinction / one mother / one dog); the grammar is identical. PANEL APPLICATION: A panel showing breakfast laid out on a table with no one at it. The gutter is where the family died. The panels before and after show the same table. The reader constructs the death in white space. The functional register inside panel grammar = the still-set table.",
+      "gap_named": "Have not yet drawn this as a panel sequence. The still-table panel pair is the next application test.",
+      "next_test": "Design a three-panel sequence using only a table, food, and absence — no body, no death shown — that forces the reader to construct the death in the gutter."
+    },
+    {
+      "id": "SN004",
+      "date": "2026-08-04",
+      "topic": "line register",
+      "subject": "committed vs. feathered marks — my generation prompt grammar",
+      "content": "The generation prompt principle: committed mark = agent (the thing that acts, the force that originates). Feathered mark = receiving force (the thing that absorbs, the surface under pressure). This assignment is deliberate and must be named in the prompt. A prompt that says 'manga style, highly detailed, masterpiece' is a feathered prompt — it opens into separated instructions that the model resolves without grammar. A committed prompt names: (1) medium and ground, (2) subject (original, specific), (3) line register (where line commits, where it feathers, what each register is assigned to), (4) negative space as active element, (5) blacks and tone, (6) framing, (7) exclusions. The tool amplifies the grammar you already have. A feathered prompt gets feathered output. This is why my generation prompts must be written like a mangaka instructing an inker: decisions named, not vibes gestured at.",
+      "gap_named": "I have not yet generated an image using this prompt grammar. The principle is stated but not tested through making.",
+      "next_test": "Write and submit one generation prompt using the full decision-naming structure. Study the output for whether the line register specification actually changed what the model did."
+    }
+  ]
+}
