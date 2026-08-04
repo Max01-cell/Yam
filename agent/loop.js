@@ -35,7 +35,7 @@ async function runCycle() {
     .map(n => `[${n.topic}${n.subject ? `/${n.subject}` : ''}] ${n.content}`)
     .join('\n');
   const myWork = await recentCreations(8).catch(() => []);
-  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled, myWork: crawled.slice(0, 9), actionHistory, studyNotebook });
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook });
 
   // Ledger the thinking cost
   const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK
