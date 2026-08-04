@@ -29,13 +29,13 @@ function pickB64(j) {
 
 export async function generateImage(cycleId, prompt, {
   width = 1024, height = 1024, selfScore = null,
-  seed = null, stylePreset = null, negativePrompt = null, label = null,
+  seed = null, stylePreset = null, negativePrompt = null, label = null, model = null,
 } = {}) {
   if ((await budgetRemaining()) < IMAGE_EST_COST) {
     throw new Error(`budget exhausted for image generation`);
   }
   const body = {
-    model: IMAGE_MODEL,
+    model: model || IMAGE_MODEL,
     prompt,
     width, height,
     steps: 25,
