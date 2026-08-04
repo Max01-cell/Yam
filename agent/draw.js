@@ -54,6 +54,21 @@ export async function draw(cycleId, { title, svg, intent = '', selfScore = null 
     console.warn('svg->png render failed (svg still published):', String(e.message).slice(0, 200));
   }
 
+  // Publish. Without this the marks never leave the droplet and the gallery
+  // shows a caption with no drawing behind it.
+  let published = false;
+  try {
+    execSync(
+      `cd ${JSON.stringify(home)} && git add -A && ` +
+      `git commit -q -m ${JSON.stringify('study: ' + String(title).slice(0, 60))} && ` +
+      `git push -q origin main`,
+      { stdio: 'pipe', timeout: 60000 }
+    );
+    published = true;
+  } catch (e) {
+    console.warn('study commit/push failed — drawing is on disk but not live:', String(e.message).slice(0, 200));
+  }
+
   await supabase.from('creations').insert({
     cycle_id: cycleId,
     media_type: 'image',
@@ -64,11 +79,13 @@ export async function draw(cycleId, { title, svg, intent = '', selfScore = null 
   });
 
   return {
+    published,
     title,
     svg: `https://yam.garden/${base}.svg`,
     png: rendered ? `https://yam.garden/${base}.png` : null,
     hint: rendered
       ? `to study your own hand, propose: look { image_url: "https://yam.garden/${base}.png" }`
       : 'png render unavailable this time; the svg is published',
+    warning: published ? null : 'commit/push failed — this drawing is not live on yam.garden yet',
   };
 }
