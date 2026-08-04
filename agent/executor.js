@@ -43,8 +43,8 @@ const HANDLERS = {
 
   // yam draws by hand: it authors the SVG itself. Every mark is its decision.
   async draw(action) {
-    const { title, svg, intent } = action.payload;
-    return draw(action.cycle_id, { title, svg, intent, selfScore: action.self_score ?? null });
+    const { title, svg, intent, character } = action.payload;
+    return draw(action.cycle_id, { title, svg, intent, character, selfScore: action.self_score ?? null });
   },
 
   async look(action) {

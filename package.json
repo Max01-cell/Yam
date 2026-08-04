@@ -5,7 +5,7 @@
   "type": "module",
   "main": "agent/loop.js",
   "scripts": {
-    "test": "node test/recall.test.mjs && node test/harvest.test.mjs"
+    "test": "node test/recall.test.mjs && node test/harvest.test.mjs && node test/cast.test.mjs"
   },
   "keywords": [],
   "author": "",

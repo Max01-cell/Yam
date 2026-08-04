@@ -12,6 +12,7 @@ import { crawlCycle } from './crawl.js';
 import { think } from './think.js';
 import { buildArchive, buildRecalled } from './recall.js';
 import { runConsolidation } from './consolidate.js';
+import { formatCast, mergeCast } from './cast.js';
 
 // Rough Sonnet pricing for the ledger; adjust if you change AGENT_MODEL.
 const IN_PER_MTOK = 3.0, OUT_PER_MTOK = 15.0;
@@ -48,7 +49,9 @@ async function runCycle() {
   const archive = await buildArchive({ consolidationState, dietState: diet?.value ?? null });
   const recalled = await buildRecalled(recallTopics);
   if (recallTopics.length) console.log(`[cycle ${cycleId}] recalled: ${recallTopics.join(', ')} (${recalled.length} chars)`);
-  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook, archive, recalled, failures });
+  const castState = (await getState('cast').catch(() => null))?.value ?? null;
+  const cast = formatCast(castState);
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook, archive, recalled, failures, cast });
 
   // Ledger the thinking cost
   const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK
@@ -75,6 +78,17 @@ async function runCycle() {
   const mu = parsed.memory_updates ?? {};
   if (mu.obsessions) await setState('obsessions', mu.obsessions);
   if (mu.taste_rules) await setState('taste_rules', mu.taste_rules);
+  // The cast MERGES, the exact opposite of diet below, because it is the one structure
+  // that must only ever accumulate. Re-read immediately before merging: draw() runs later
+  // on the executor timer and may have incremented a study count since this cycle began,
+  // and writing the stale copy back would erase practice that actually happened.
+  if (mu.cast) {
+    const fresh = (await getState('cast').catch(() => null))?.value ?? castState;
+    const merged = mergeCast(fresh, mu.cast);
+    await setState('cast', merged);
+    console.log(`[cycle ${cycleId}] cast: ${Object.keys(merged.characters).length} character(s) — ${
+      Object.entries(merged.characters).map(([n, c]) => `${n} x${c.studies}`).join(', ') || 'none'}`);
+  }
   // Setting diet REPLACES the feed list. yam's prompt asks it to name the feeds
   // it wants, so a reply naming the two it is currently interested in silently
   // destroys the other six — which is how a diet of eight sources became two.

@@ -9,6 +9,8 @@ import { dirname } from 'path';
 import { execSync } from 'child_process';
 import { createClient } from '@supabase/supabase-js';
 import { triggerDeploy } from './deploy.js';
+import { getState, setState } from './memory.js';
+import { normaliseName, recordStudy } from './cast.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -103,7 +105,7 @@ function validateSvg(svg) {
   return s;
 }
 
-export async function draw(cycleId, { title, svg, intent = '', selfScore = null }) {
+export async function draw(cycleId, { title, svg, intent = '', selfScore = null, character = null }) {
   const clean = validateSvg(svg);
   const stamp = new Date().toISOString().slice(0, 10);
   const base = `studies/${stamp}-${slugify(title)}`;
@@ -141,20 +143,40 @@ export async function draw(cycleId, { title, svg, intent = '', selfScore = null 
     console.warn('study commit/push failed — drawing is on disk but not live:', String(e.message).slice(0, 200));
   }
 
+  const who = normaliseName(character);
+  const label = who ? `[drawn by hand] ${who}: ${title}` : `[drawn by hand] ${title}`;
+
   await supabase.from('creations').insert({
     cycle_id: cycleId,
     media_type: 'image',
-    prompt: intent ? `[drawn by hand] ${title} — ${intent}` : `[drawn by hand] ${title}`,
+    prompt: intent ? `${label} — ${intent}` : label,
     storage_path: `https://yam.garden/${base}${rendered ? '.png' : '.svg'}`,
     self_score: selfScore,
     posted: false,
   });
+
+  // Count the study against the cast HERE, at the moment the drawing exists — the same
+  // reason the SVG is measured rather than described. A practice count yam could write
+  // for itself would be an opinion about its own diligence.
+  let castStudies = null;
+  if (who) {
+    try {
+      const prev = (await getState('cast').catch(() => null))?.value ?? null;
+      const next = recordStudy(prev, who, `https://yam.garden/${base}${rendered ? '.png' : '.svg'}`);
+      await setState('cast', next);
+      castStudies = next.characters[Object.keys(next.characters).find(k => k.toLowerCase() === who.toLowerCase())]?.studies ?? null;
+    } catch (e) {
+      console.warn(`cast study count not recorded for ${who}: ${String(e.message).slice(0, 160)}`);
+    }
+  }
 
   const measurements = measureSvg(clean);
 
   return {
     published,
     title,
+    character: who || null,
+    castStudies,
     svg: `https://yam.garden/${base}.svg`,
     png: rendered ? `https://yam.garden/${base}.png` : null,
     measured: summariseMeasurements(measurements),
