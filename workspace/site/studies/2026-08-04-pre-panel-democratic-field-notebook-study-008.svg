@@ -1,0 +1,71 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 800 600' width='800' height='600' style='background:white'>
+  <!-- Study: what is the implicit grammar when there are no panel borders? -->
+  <!-- Multiple figures at different scales, different orientations, no alignment grid -->
+  <!-- All marks in committed-ink register: decisive contour, terminates rather than tapers -->
+
+  <!-- Figure 1: large standing human form, upper left, dominant scale -->
+  <!-- Head -->
+  <ellipse cx='130' cy='85' rx='28' ry='32' fill='none' stroke='black' stroke-width='2.8'/>
+  <!-- Neck -->
+  <line x1='130' y1='117' x2='130' y2='135' stroke='black' stroke-width='2.8'/>
+  <!-- Shoulders / torso -->
+  <path d='M90 140 Q130 128 170 140 L165 230 Q130 245 95 230 Z' fill='none' stroke='black' stroke-width='2.8'/>
+  <!-- Left arm -->
+  <path d='M90 145 Q68 180 72 220' fill='none' stroke='black' stroke-width='2.2'/>
+  <!-- Right arm -->
+  <path d='M170 145 Q192 178 185 218' fill='none' stroke='black' stroke-width='2.2'/>
+  <!-- Left leg -->
+  <path d='M105 230 Q100 290 98 350' fill='none' stroke='black' stroke-width='2.8'/>
+  <!-- Right leg -->
+  <path d='M155 230 Q160 290 162 350' fill='none' stroke='black' stroke-width='2.8'/>
+  <!-- Feet -->
+  <path d='M98 350 Q85 358 75 355' fill='none' stroke='black' stroke-width='2.2'/>
+  <path d='M162 350 Q175 358 185 355' fill='none' stroke='black' stroke-width='2.2'/>
+
+  <!-- Figure 2: small crouching form, lower right, different scale entirely -->
+  <!-- Head -->
+  <ellipse cx='640' cy='470' rx='14' ry='16' fill='none' stroke='black' stroke-width='2.2'/>
+  <!-- Crouching body -->
+  <path d='M630 486 Q625 510 628 530 Q635 540 655 535 Q665 520 660 500 Q650 488 630 486 Z' fill='none' stroke='black' stroke-width='2.2'/>
+  <!-- Arms wrapped around knees -->
+  <path d='M628 505 Q620 520 625 530' fill='none' stroke='black' stroke-width='1.8'/>
+  <path d='M660 505 Q668 520 663 530' fill='none' stroke='black' stroke-width='1.8'/>
+
+  <!-- Figure 3: medium figure horizontal/floating, upper right, rotated ~15deg -->
+  <!-- Head -->
+  <ellipse cx='600' cy='110' rx='20' ry='22' fill='none' stroke='black' stroke-width='2.2' transform='rotate(-15 600 110)'/>
+  <!-- Torso horizontal -->
+  <path d='M575 130 Q610 125 650 118 Q658 140 620 150 Q585 155 575 130 Z' fill='none' stroke='black' stroke-width='2.2'/>
+  <!-- Arms extended -->
+  <path d='M650 118 Q680 108 705 112' fill='none' stroke='black' stroke-width='1.8'/>
+  <path d='M575 130 Q548 138 525 132' fill='none' stroke='black' stroke-width='1.8'/>
+  <!-- Legs trailing -->
+  <path d='M590 150 Q580 175 575 195' fill='none' stroke='black' stroke-width='2.2'/>
+  <path d='M625 150 Q618 175 615 198' fill='none' stroke='black' stroke-width='2.2'/>
+
+  <!-- Figure 4: tiny standing figure, center ground, small enough to feel far away -->
+  <ellipse cx='390' cy='355' rx='8' ry='9' fill='none' stroke='black' stroke-width='1.8'/>
+  <path d='M385 364 Q390 358 395 364 L393 395 Q390 400 387 395 Z' fill='none' stroke='black' stroke-width='1.8'/>
+  <line x1='387' y1='395' x2='384' y2='425' stroke='black' stroke-width='1.8'/>
+  <line x1='393' y1='395' x2='396' y2='425' stroke='black' stroke-width='1.8'/>
+
+  <!-- Figure 5: animal form — four-legged, mid-left, medium scale -->
+  <!-- Body -->
+  <ellipse cx='270' cy='420' rx='55' ry='28' fill='none' stroke='black' stroke-width='2.5'/>
+  <!-- Head on long neck -->
+  <path d='M325 410 Q345 390 350 370' fill='none' stroke='black' stroke-width='2.5'/>
+  <ellipse cx='352' cy='358' rx='16' ry='13' fill='none' stroke='black' stroke-width='2.2'/>
+  <!-- Four legs -->
+  <line x1='240' y1='445' x2='235' y2='490' stroke='black' stroke-width='2.2'/>
+  <line x1='260' y1='447' x2='255' y2='492' stroke='black' stroke-width='2.2'/>
+  <line x1='290' y1='447' x2='293' y2='492' stroke='black' stroke-width='2.2'/>
+  <line x1='308' y1='445' x2='312' y2='490' stroke='black' stroke-width='2.2'/>
+  <!-- Tail -->
+  <path d='M215 415 Q195 405 185 415 Q178 425 188 430' fill='none' stroke='black' stroke-width='2.0'/>
+
+  <!-- Ground line — very faint, just enough to anchor scale -->
+  <line x1='60' y1='510' x2='740' y2='510' stroke='black' stroke-width='0.6' stroke-dasharray='4,8'/>
+
+  <!-- Study label -->
+  <text x='20' y='575' font-family='monospace' font-size='11' fill='#888'>yam / notebook-008 / pre-panel democratic field / no borders, no forced sequence</text>
+</svg>
