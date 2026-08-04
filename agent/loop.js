@@ -13,6 +13,7 @@ import { think } from './think.js';
 import { buildArchive, buildRecalled } from './recall.js';
 import { runConsolidation } from './consolidate.js';
 import { formatCast, mergeCast } from './cast.js';
+import { buildCurriculum } from './curriculum.js';
 
 // Rough Sonnet pricing for the ledger; adjust if you change AGENT_MODEL.
 const IN_PER_MTOK = 3.0, OUT_PER_MTOK = 15.0;
@@ -51,7 +52,8 @@ async function runCycle() {
   if (recallTopics.length) console.log(`[cycle ${cycleId}] recalled: ${recallTopics.join(', ')} (${recalled.length} chars)`);
   const castState = (await getState('cast').catch(() => null))?.value ?? null;
   const cast = formatCast(castState);
-  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook, archive, recalled, failures, cast });
+  const curriculum = await buildCurriculum();
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook, archive, recalled, failures, cast, curriculum });
 
   // Ledger the thinking cost
   const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK

@@ -59,7 +59,7 @@ Quality bar: only propose content you would score 80+. No filler.
 You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle. This REPLACES your entire feed list rather than adding to it, so send every feed you want to keep, not only the ones you are adding. Your current list is shown to you each cycle under YOUR DIET RIGHT NOW — copy from it. Sending two urls when you meant 'also these two' leaves you crawling two sources.`;
 }
 
-export async function think({ identity, tasteRules, recentThoughts, crawled, myWork = [], actionHistory, studyNotebook, archive = '', recalled = '', failures = [], cast = '' }) {
+export async function think({ identity, tasteRules, recentThoughts, crawled, myWork = [], actionHistory, studyNotebook, archive = '', recalled = '', failures = [], cast = '', curriculum = '' }) {
   const material = crawled
     .map(c => `SOURCE: ${c.url}\n${c.content.slice(0, 4000)}`)
     .join('\n\n---\n\n');
@@ -87,6 +87,7 @@ export async function think({ identity, tasteRules, recentThoughts, crawled, myW
           ? `YOUR WORK SO FAR (exact urls — copy one verbatim when you want to look at your own work, never retype from memory):\n` +
             myWork.map(w => `${w.storage_path}  — ${String(w.prompt).slice(0, 90)}${w.self_score != null ? ` (self-score ${w.self_score})` : ''}`).join('\n') + '\n\n'
           : '') +
+        (curriculum ? `YOUR CURRICULUM — THE HANDS YOU ARE STUDYING (steal the principle, never the signature; never draw their characters):\n${curriculum}\n\n` : '') +
         (cast ? `YOUR CAST (the characters you are actually building — advance one of these rather than inventing another one-off; set character in a draw payload to count a study against them):\n${cast}\n\n` : '') +
         (studyNotebook ? `YOUR MOST RECENT NOTEBOOK NOTES (the latest 20 only, in full — the rest of the notebook is in the index below):\n${studyNotebook}\n\n` : '') +
         (archive ? `YOUR ARCHIVE — WHAT EXISTS BEYOND WHAT YOU CAN SEE (an index, not the contents; name any of it in recall_topics to read it back in full next cycle):\n${archive}\n\n` : '') +
