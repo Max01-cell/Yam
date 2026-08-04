@@ -41,10 +41,15 @@ app.get('/mind/trail', async () => {
   return data ?? [];
 });
 
-app.get('/mind/creations', async () => {
+// limit is a parameter because the site now offers the whole workshop, not the last 24.
+// Bounded at 500: the archive only grows, and an unbounded default would eventually make
+// the front page fetch every study yam has ever made on every 90-second refresh.
+app.get('/mind/creations', async (req) => {
+  const asked = Number(req.query?.limit);
+  const limit = Number.isFinite(asked) ? Math.min(Math.max(Math.trunc(asked), 1), 500) : 24;
   const { data } = await supabase.from('creations')
     .select('created_at, media_type, prompt, storage_path, self_score, posted')
-    .order('created_at', { ascending: false }).limit(24);
+    .order('created_at', { ascending: false }).limit(limit);
   // storage_path → public URL is resolved client-side or via Supabase storage public bucket
   return (data ?? []).map(c => ({ ...c, url: c.storage_path || null }));
 });

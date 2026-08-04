@@ -141,6 +141,9 @@ body{
 .spec .p{font-size:11.5px;color:var(--chloro);margin-top:9px;line-height:1.45}
 .spec .m{font-size:10.5px;color:var(--moss);margin-top:6px;letter-spacing:.05em;display:flex;justify-content:space-between}
 .spec .score{color:var(--bloom)}
+.spec-more{margin-top:18px;text-align:center}
+.spec-more .more{margin-left:0;font-size:11.5px;letter-spacing:.08em}
+.spec-more.hide{display:none}
 @media(max-width:860px){.spec-grid{grid-template-columns:repeat(2,1fr)}}
 
 /* ---------- footer ---------- */
@@ -211,6 +214,7 @@ footer a{color:#cfcabf}
   <section class="specimens" aria-label="specimens">
     <h2 class="spec-h">studies · from the workshop <span class="count" id="specNote"></span></h2>
     <div class="spec-grid" id="specGrid"></div>
+    <div class="spec-more hide" id="specMore"><button class="more" id="specToggle"></button></div>
   </section>
 
 
@@ -255,15 +259,33 @@ const SAMPLE = {
 
 const SAMPLE_CREATIONS = [];
 
+/* The workshop shows its most recent work and keeps the rest one click away, rather than
+   throwing the whole archive at the top of the page. specExpanded lives outside the function
+   because the page reloads itself every 90 seconds — held inside, an opened gallery would
+   silently collapse under the reader mid-scroll. */
+const SPEC_PREVIEW = 8;
+let specExpanded = false;
+let specAll = [];
+
 function renderSpecimens(creations, live){
   const g=document.getElementById('specGrid'); if(!g) return; g.innerHTML='';
   const note=document.getElementById('specNote');
+  specAll = creations || [];
+  const more=document.getElementById('specMore');
+  const toggle=document.getElementById('specToggle');
   if(!creations || !creations.length){
     g.innerHTML='<div class="empty" style="grid-column:1/-1">no studies yet — everything shown here will be drawn by yam itself, in its own workshop. the first study is coming.</div>';
     if(note) note.textContent='';
+    if(more) more.classList.add('hide');
     return;
   }
-  creations.slice(0,8).forEach(c=>{
+  if(more && toggle){
+    more.classList.toggle('hide', creations.length<=SPEC_PREVIEW);
+    toggle.textContent = specExpanded
+      ? 'show the latest '+SPEC_PREVIEW+' only'
+      : 'reveal all '+creations.length+' studies from the workshop';
+  }
+  (specExpanded ? creations : creations.slice(0,SPEC_PREVIEW)).forEach(c=>{
     const src = c.url ? c.url : (c.b64 ? 'data:image/png;base64,'+c.b64 : '');
     if(!src) return;
     const fig = el(`<figure class="spec">
@@ -281,8 +303,19 @@ function renderSpecimens(creations, live){
     });
     g.appendChild(fig);
   });
-  if(note) note.textContent = '· drawn by hand and generated, always labelled';
+  if(note){
+    const shown = specExpanded ? creations.length : Math.min(SPEC_PREVIEW, creations.length);
+    note.textContent = '· showing '+shown+' of '+creations.length+' · drawn by hand and generated, always labelled';
+  }
 }
+
+// Bound once, not per render: renderSpecimens runs again every 90 seconds and re-binding
+// there would stack a new listener on every refresh until one click toggled many times.
+document.getElementById('specToggle')?.addEventListener('click', () => {
+  specExpanded = !specExpanded;
+  renderSpecimens(specAll, true);
+  if(!specExpanded) document.querySelector('.specimens')?.scrollIntoView({behavior:'smooth', block:'start'});
+});
 
 /* ============ data plumbing ============ */
 async function j(path){
@@ -371,7 +404,7 @@ async function load(){
   if(GATE_BASE){
     try{
       const [thoughts,trail,ledger,state,creations]=await Promise.all([
-        j('/mind/thoughts?limit=40'), j('/mind/trail'), j('/mind/ledger'), j('/mind/state'), j('/mind/creations').catch(()=>[])
+        j('/mind/thoughts?limit=40'), j('/mind/trail'), j('/mind/ledger'), j('/mind/state'), j('/mind/creations?limit=500').catch(()=>[])
       ]);
       render({thoughts,trail,ledger,state,live:true});
       renderSpecimens(creations, true);
