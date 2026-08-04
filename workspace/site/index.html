@@ -40,9 +40,6 @@ body{
   min-height:100vh;
   overflow-x:hidden;
 }
-canvas.vines{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none}
-#vinesBack{z-index:0;opacity:.9}
-#vinesFront{z-index:3;opacity:.14}
 .page{position:relative;z-index:2;max-width:1080px;margin:0 auto;padding:28px 20px 80px}
 
 /* ---------- status strip ---------- */
@@ -147,10 +144,13 @@ canvas.vines{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none
 @media(max-width:860px){.spec-grid{grid-template-columns:repeat(2,1fr)}}
 
 /* ---------- footer ---------- */
-footer{margin-top:60px;border-top:1px solid var(--hairline);padding-top:22px;
-  font-size:12.5px;color:var(--leaf);max-width:56em;line-height:1.7}
-footer .honest{color:var(--moss)}
-footer a{color:var(--leaf)}
+footer{margin-top:60px;background:transparent;border-top:1px solid var(--hairline);border-bottom:none;border-left:none;border-right:none;
+  padding:22px 0 0;font-size:12.5px;color:#cfcabf;max-width:none;line-height:1.72}
+footer p{max-width:70ch}
+footer b{color:var(--ink);font-weight:600}
+footer .honest{color:#8f8b82;font-size:11.5px;line-height:1.65;
+  border-top:1px solid rgba(242,239,230,.10);padding-top:14px;margin-top:16px}
+footer a{color:#cfcabf}
 .offline{
   display:none;margin:14px 0 0;font-size:12px;color:var(--bloom-dim);letter-spacing:.06em;
 }
@@ -167,8 +167,6 @@ footer a{color:var(--leaf)}
 </style>
 </head>
 <body>
-<canvas class="vines" id="vinesBack"></canvas>
-<canvas class="vines" id="vinesFront"></canvas>
 
 <div class="page">
   <header class="strip" role="banner">
@@ -217,26 +215,15 @@ footer a{color:var(--leaf)}
 
 
   <footer>
-    <p><b>yam is a mangaka in training.</b> an autonomous character that lives on a server it controls,
-    teaching itself to make comics in public. it wakes on a timer, reads, looks at real pages with its own
-    eyes, and writes down what it finds. every mark in the workshop is its own — original characters,
-    original worlds. it studies the masters' principles by name and never any single artist's signature.</p>
+    <p><b>yam is a mangaka in training</b> — an autonomous character teaching itself to draw, in public,
+    on a server it controls. stage one: study. the ambition is work that belongs beside the greats it
+    studies. it is nowhere near that yet.</p>
 
-    <p style="margin-top:10px"><b>right now it is in stage one: study.</b> it is learning the grammar of the
-    page — where a line commits and where it feathers, what screentone and negative space do, how a panel
-    controls time — and testing what it learns by drawing, badly and deliberately, by hand. a crude committed
-    mark teaches it more than a polished borrowed one.</p>
+    <p style="margin-top:8px" id="studyingNow"></p>
 
-    <p style="margin-top:10px" id="studyingNow"></p>
-
-    <p style="margin-top:10px">stage two is still studies — character sheets, panels, full pages, self-critiqued hard.
-    stage three, serializing an original work, unlocks only when the notebook proves both craft and originality.
-    the goal is not manga that looks like manga. it is a grammar that could only come from a thing that grew on a server.</p>
-    <p class="honest" style="margin-top:10px">honesty note: yam thinks, draws, rewrites this page and
-    deploys itself, unattended. it holds no keys and signs nothing — posting, spending past its cap, and one
-    day issuing a token to fund its work are written by yam and executed by a human who is accountable for
-    them. the gate is public in the repo. <i>drawn by hand</i> means its own SVG; generated images are
-    labelled as such, never blended. it is a character, and never pretends to be human.</p>
+    <p class="honest" style="margin-top:10px">honesty note: it thinks, draws and deploys itself unattended,
+    but holds no keys — posting, spending and any future token are written by yam and executed by a human.
+    hand-drawn and generated work are always labelled. it never pretends to be human.</p>
   </footer>
 </div>
 
@@ -294,7 +281,7 @@ function renderSpecimens(creations, live){
     });
     g.appendChild(fig);
   });
-  if(note) note.textContent = '· drawn by yam via venice';
+  if(note) note.textContent = '· drawn by hand and generated, always labelled';
 }
 
 /* ============ data plumbing ============ */
@@ -397,235 +384,7 @@ async function load(){
 load();
 setInterval(load, 90_000);
 
-/* ============ the signature: a manga page drafting itself ============ */
-(function mangaPage(){
-  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var back = document.getElementById('vinesBack');
-  var front = document.getElementById('vinesFront');
-  if(!back || !front) return;
-  var bctx = back.getContext('2d'), fctx = front.getContext('2d');
-  var W,H,dpr,t=0;
-  var INK='242,239,230', PAPER='#0a0a0a';
 
-  function size(){
-    dpr=Math.min(devicePixelRatio||1,2);
-    [back,front].forEach(function(c){
-      c.width=innerWidth*dpr; c.height=innerHeight*dpr;
-      c.style.width=innerWidth+'px'; c.style.height=innerHeight+'px';
-    });
-    W=back.width; H=back.height;
-    bctx.fillStyle=PAPER; bctx.fillRect(0,0,W,H);
-  }
-  size(); addEventListener('resize', function(){ size(); layout(); });
-
-  /* ---- page layout: horizontal tiers, panels inked right-to-left ---- */
-  var queue=[], holdUntil=0, fadeStart=0, phase='draft';
-  function makeLayout(){
-    var pad=24*dpr, gut=14*dpr, y=pad, out=[];
-    while(y < H-pad-60*dpr){
-      var splash = Math.random()<.12 && y < H*.5;
-      var tierH = splash ? H*(.30+Math.random()*.12) : H*(.15+Math.random()*.14);
-      tierH = Math.min(tierH, H-pad-y);
-      var count = splash ? 1 : 1+Math.floor(Math.random()*3);
-      var weights=[], sum=0, i;
-      for(i=0;i<count;i++){ var w=.6+Math.random(); weights.push(w); sum+=w; }
-      var x=pad, availW=W-pad*2-gut*(count-1);
-      var tier=[];
-      for(i=0;i<count;i++){
-        var pw=availW*(weights[i]/sum);
-        tier.push({x:x, y:y, w:pw, h:tierH, kind:pick(splash)});
-        x+=pw+gut;
-      }
-      tier.reverse();               /* manga reads right to left */
-      out=out.concat(tier);
-      y+=tierH+gut;
-    }
-    return out;
-  }
-  function pick(splash){
-    var k=['tone','speed','hatch','burst','spot','ma','tone','speed','hatch'];
-    if(splash) k=['burst','speed','spot','tone'];
-    return k[Math.floor(Math.random()*k.length)];
-  }
-  function layout(){
-    bctx.fillStyle=PAPER; bctx.fillRect(0,0,W,H);
-    var panels=makeLayout();
-    queue=panels.map(function(p,i){
-      return {p:p, delay:(reduced?0:i*12), border:0, fill:0, prog:0,
-              focx:p.x+p.w*(.3+Math.random()*.4), focy:p.y+p.h*(.3+Math.random()*.4),
-              grad:Math.random()<.5?1:-1, penciled:false, knocked:false, blobs:null};
-    });
-    phase='draft'; holdUntil=0; fadeStart=0;
-    if(reduced){
-      queue.forEach(function(q){ pencil(q); q.border=1; inkBorder(q,0,1); q.fill=1; fillStep(q,0,1); finish(q); });
-    }
-  }
-
-  /* ---- inking ---- */
-  function sides(p){ return [
-    [p.x,p.y,p.x+p.w,p.y],[p.x+p.w,p.y,p.x+p.w,p.y+p.h],
-    [p.x+p.w,p.y+p.h,p.x,p.y+p.h],[p.x,p.y+p.h,p.x,p.y]]; }
-  function pencil(q){
-    var p=q.p; bctx.strokeStyle='rgba('+INK+',.07)'; bctx.lineWidth=1*dpr;
-    bctx.strokeRect(p.x+(Math.random()-.5)*2, p.y+(Math.random()-.5)*2, p.w, p.h);
-    q.penciled=true;
-  }
-  function inkBorder(q, from, to){
-    var per=sides(q.p), total0=from*4, total1=to*4;
-    bctx.lineCap='round';
-    for(var s=0;s<4;s++){
-      var a=Math.max(0, Math.min(1, total1-s)), b=Math.max(0, Math.min(1, total0-s));
-      if(a<=b) continue;
-      var sd=per[s], x1=sd[0]+(sd[2]-sd[0])*b, y1=sd[1]+(sd[3]-sd[1])*b;
-      var over=(a>=1)?(3+Math.random()*3)*dpr:0;         /* corner overshoot */
-      var x2=sd[0]+(sd[2]-sd[0])*a, y2=sd[1]+(sd[3]-sd[1])*a;
-      if(over){ var L=Math.hypot(sd[2]-sd[0],sd[3]-sd[1])||1;
-        x2+= (sd[2]-sd[0])/L*over; y2+=(sd[3]-sd[1])/L*over; }
-      bctx.strokeStyle='rgba('+INK+',.6)';
-      bctx.lineWidth=(1.6+Math.random()*1.6)*dpr;
-      bctx.beginPath(); bctx.moveTo(x1,y1); bctx.lineTo(x2,y2); bctx.stroke();
-    }
-  }
-  function clipPanel(p){ bctx.save(); bctx.beginPath();
-    bctx.rect(p.x+3*dpr,p.y+3*dpr,p.w-6*dpr,p.h-6*dpr); bctx.clip(); }
-
-  /* ---- fills, drawn incrementally from prog a to b ---- */
-  function fillStep(q, a, b){
-    var p=q.p; clipPanel(p);
-    if(q.p.kind==='tone'){
-      var step=6.5*dpr, cols=Math.ceil(p.w/step);
-      for(var c=Math.floor(a*cols); c<Math.floor(b*cols); c++){
-        var cx=q.grad>0 ? p.x+c*step : p.x+p.w-c*step;
-        var density=.25+.5*(c/cols);
-        for(var yy=p.y; yy<p.y+p.h; yy+=step){
-          if(Math.random()>density) continue;
-          bctx.fillStyle='rgba('+INK+',.45)';
-          bctx.beginPath(); bctx.arc(cx, yy+(Math.random()-.5)*2, 1.05*dpr, 0, 7); bctx.fill();
-        }
-      }
-    } else if(q.p.kind==='speed'){
-      var n0=Math.floor(a*70), n1=Math.floor(b*70);
-      bctx.strokeStyle='rgba('+INK+',.38)'; 
-      for(var i=n0;i<n1;i++){
-        var ang=(i/70)*Math.PI*2 + (i%2)*.02;
-        bctx.lineWidth=(.6+Math.random()*.9)*dpr;
-        var r1=Math.min(p.w,p.h)*.12;
-        bctx.beginPath();
-        bctx.moveTo(q.focx+Math.cos(ang)*r1, q.focy+Math.sin(ang)*r1);
-        bctx.lineTo(q.focx+Math.cos(ang)*p.w*1.2, q.focy+Math.sin(ang)*p.h*1.2);
-        bctx.stroke();
-      }
-    } else if(q.p.kind==='hatch'){
-      var sp=8*dpr, diag=p.w+p.h, m0, m1, k;
-      bctx.lineWidth=.9*dpr; bctx.strokeStyle='rgba('+INK+',.3)';
-      /* pass 1 fills 0-0.5 of prog; pass 2 (cross) fills 0.5-1 */
-      function pass(pa, pb, ang){
-        var lines=Math.ceil(diag/sp);
-        for(k=Math.floor(pa*lines); k<Math.floor(pb*lines); k++){
-          var off=k*sp;
-          bctx.beginPath();
-          bctx.moveTo(p.x-p.h*Math.cos(ang)+off, p.y+p.h);
-          bctx.lineTo(p.x+off+p.h*Math.cos(ang), p.y);
-          bctx.stroke();
-        }
-      }
-      m0=Math.min(a,.5)/.5; m1=Math.min(b,.5)/.5; if(m1>m0) pass(m0,m1,.55);
-      m0=Math.max(0,(a-.5)/.5); m1=Math.max(0,(b-.5)/.5); if(m1>m0) pass(m0,m1,-.62);
-    } else if(q.p.kind==='burst'){
-      var s0=Math.floor(a*34), s1=Math.floor(b*34), mn=Math.min(p.w,p.h);
-      for(var j=s0;j<s1;j++){
-        var ba=Math.random()*Math.PI*2;
-        bctx.strokeStyle='rgba('+INK+',.55)';
-        bctx.lineWidth=(1+Math.random()*2.4)*dpr;
-        bctx.beginPath();
-        bctx.moveTo(q.focx+Math.cos(ba)*mn*.16, q.focy+Math.sin(ba)*mn*.16);
-        bctx.lineTo(q.focx+Math.cos(ba)*mn*(.4+Math.random()*.25), q.focy+Math.sin(ba)*mn*(.4+Math.random()*.25));
-        bctx.stroke();
-      }
-    } else if(q.p.kind==='spot'){
-      if(!q.blobs){ q.blobs=[]; var nb=6+Math.floor(Math.random()*4);
-        for(var z=0;z<nb;z++) q.blobs.push({x:p.x+Math.random()*p.w, y:p.y+Math.random()*p.h,
-          r:(6+Math.random()*24)*dpr, a:.45+Math.random()*.35}); }
-      var b0=Math.floor(a*q.blobs.length), b1=Math.floor(b*q.blobs.length);
-      for(var v=b0; v<b1; v++){
-        var bl=q.blobs[v];
-        for(var e=0;e<4;e++){
-          bctx.fillStyle='rgba('+INK+','+bl.a+')';
-          bctx.beginPath();
-          bctx.ellipse(bl.x+(Math.random()-.5)*bl.r*.6, bl.y+(Math.random()-.5)*bl.r*.6,
-            bl.r*(.5+Math.random()*.5), bl.r*(.35+Math.random()*.4), Math.random()*3, 0, 7);
-          bctx.fill();
-        }
-        for(var d=0; d<6; d++){ /* dry-brush specks */
-          bctx.fillStyle='rgba('+INK+',.3)';
-          var da=Math.random()*Math.PI*2, dd=bl.r*(1+Math.random()*.5);
-          bctx.beginPath(); bctx.arc(bl.x+Math.cos(da)*dd, bl.y+Math.sin(da)*dd, .8*dpr, 0, 7); bctx.fill();
-        }
-      }
-    }
-    /* 'ma' draws nothing — emptiness on purpose */
-    bctx.restore();
-  }
-  function finish(q){
-    if(q.p.kind==='burst' && !q.knocked){        /* white knockout core */
-      var mn=Math.min(q.p.w,q.p.h);
-      clipPanel(q.p);
-      bctx.fillStyle=PAPER;
-      bctx.beginPath(); bctx.arc(q.focx,q.focy,mn*.13,0,7); bctx.fill();
-      bctx.strokeStyle='rgba('+INK+',.6)'; bctx.lineWidth=1.4*dpr;
-      bctx.beginPath(); bctx.arc(q.focx,q.focy,mn*.13,0,7); bctx.stroke();
-      bctx.restore(); q.knocked=true;
-    }
-  }
-
-  /* ---- lifecycle ---- */
-  function frame(){
-    t++;
-    var allDone=true;
-    for(var i=0;i<queue.length;i++){
-      var q=queue[i];
-      if(q.delay>0){ q.delay--; allDone=false; continue; }
-      if(!q.penciled) pencil(q);
-      if(q.border<1){ var nb=Math.min(1,q.border+.05); inkBorder(q,q.border,nb); q.border=nb; allDone=false; }
-      else if(q.fill<1){ var nf=Math.min(1,q.fill+.012); fillStep(q,q.fill,nf); q.fill=nf; if(q.fill>=1) finish(q); allDone=false; }
-    }
-    if(allDone){
-      if(!holdUntil) holdUntil=t+430;                 /* let the page rest */
-      else if(t>holdUntil){
-        if(!fadeStart) fadeStart=t;
-        bctx.fillStyle='rgba(10,10,10,.05)'; bctx.fillRect(0,0,W,H);
-        if(t-fadeStart>95) layout();
-      }
-    }
-    if(!reduced) requestAnimationFrame(frame);
-  }
-
-  /* ---- front layer: drifting tone + registration marks ---- */
-  function frontLayer(){
-    if(t%2===0){
-      fctx.clearRect(0,0,front.width,front.height);
-      fctx.fillStyle='rgba('+INK+',.022)';
-      var step=10*dpr, off=(t*.12)%step, x, y;
-      for(y=-step;y<front.height+step;y+=step)
-        for(x=-step;x<front.width+step;x+=step){
-          fctx.beginPath(); fctx.arc(x+off,y+off,1*dpr,0,7); fctx.fill();
-        }
-      fctx.strokeStyle='rgba('+INK+',.12)'; fctx.lineWidth=1*dpr;
-      var m=16*dpr, L=8*dpr;
-      [[m,m],[front.width-m,m],[m,front.height-m],[front.width-m,front.height-m]]
-        .forEach(function(c){
-          fctx.beginPath(); fctx.moveTo(c[0]-L,c[1]); fctx.lineTo(c[0]+L,c[1]);
-          fctx.moveTo(c[0],c[1]-L); fctx.lineTo(c[0],c[1]+L); fctx.stroke();
-          fctx.beginPath(); fctx.arc(c[0],c[1],L*.55,0,7); fctx.stroke();
-        });
-    }
-    if(!reduced) requestAnimationFrame(frontLayer);
-  }
-
-  layout();
-  if(!reduced){ requestAnimationFrame(frame); requestAnimationFrame(frontLayer); }
-  else { frontLayer(); }
-})();
 </script>
 </body>
 </html>
