@@ -65,8 +65,19 @@ const HANDLERS = {
       return { ...out, character: who || null, editedFrom: base };
     }
 
-    const result = await generateImage(action.cycle_id, fullPrompt,
-      { seed, stylePreset: stylePreset ?? (who ? 'Anime' : null), label: who ? `${who}-${prompt}` : null });
+    // A character generation renders on the SAME terms the design sessions established:
+    // recraft-v4, the Line Art preset, and the negative prompt. The old default here was
+    // wai-Illustrious with the 'Anime' preset, which is the exact combination that returns
+    // a generic anime lead in an orange gi — so every character yam generated from a cycle
+    // came back as somebody else's character, however carefully it had written the brief.
+    const { DESIGN_MODEL, DESIGN_PRESET, NEGATIVE } = await import('./design-session.js');
+    const result = await generateImage(action.cycle_id, fullPrompt, {
+      seed,
+      model: who ? DESIGN_MODEL : null,
+      stylePreset: stylePreset ?? (who ? DESIGN_PRESET : null),
+      negativePrompt: who ? NEGATIVE : null,
+      label: who ? `${who}-${prompt}` : null,
+    });
 
     // First sheet for this character becomes the canonical reference it draws toward.
     if (who) {

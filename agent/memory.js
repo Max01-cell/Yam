@@ -121,8 +121,23 @@ export function utcDay(d = new Date()) {
 // only reset when money was spent would stay exhausted precisely when it is exhausted.
 function rolled(v) {
   const today = utcDay();
-  if (v?.day !== today) return { ...v, day: today, spent_today: 0, last_day_spend: Number(v?.spent_today ?? 0) };
+  if (v?.day !== today) {
+    return { ...v, day: today, spent_today: 0, spent_image_today: 0, last_day_spend: Number(v?.spent_today ?? 0) };
+  }
   return v;
+}
+
+// One cap, two pools. Cognition and image generation were competing for the same $5 and
+// cognition always won: think() never checked the budget at all while every generator did,
+// so by mid-morning the cap was spent on thinking and the day's images could not happen.
+// A reserved slice cannot be reached by anything that is not making a picture.
+const IMAGE_RESERVE = Number(process.env.IMAGE_RESERVE_USD || 2);
+
+// Services whose spend comes out of the image pool rather than the cognition pool.
+const IMAGE_SERVICES = new Set(['venice']);
+
+function reserveOf(v) {
+  return Number(v?.image_reserve_usd ?? IMAGE_RESERVE);
 }
 
 export async function recordSpend(cycleId, service, amountUsd, detail = '') {
@@ -132,14 +147,44 @@ export async function recordSpend(cycleId, service, amountUsd, detail = '') {
   const budget = await getState('budget');
   const v = rolled(budget.value);
   v.spent_today = Number((Number(v.spent_today || 0) + amountUsd).toFixed(4));
+  if (IMAGE_SERVICES.has(service)) {
+    v.spent_image_today = Number((Number(v.spent_image_today || 0) + amountUsd).toFixed(4));
+  }
+  v.image_reserve_usd = reserveOf(v);
   await setState('budget', v);
 }
 
-export async function budgetRemaining() {
+async function budget() {
   const { value } = await getState('budget');
   const v = rolled(value);
   if (v !== value) await setState('budget', v).catch(() => {});
+  return v;
+}
+
+// The whole cap. Still what the consumers outside both pools check against.
+export async function budgetRemaining() {
+  const v = await budget();
   return Number(v.daily_cap_usd) - Number(v.spent_today || 0);
+}
+
+// What image generation may still spend. Bounded by the reserve rather than by the cap,
+// because the starvation runs in both directions: an unbounded design session firing at
+// 04:00 would spend the entire day's money before cognition ever woke up, which is the
+// same bug as cognition eating the images, only earlier in the morning.
+export async function imageBudgetRemaining() {
+  const v = await budget();
+  const capLeft = Number(v.daily_cap_usd) - Number(v.spent_today || 0);
+  return Math.max(0, Math.min(capLeft, reserveOf(v) - Number(v.spent_image_today || 0)));
+}
+
+// What thinking may still spend: the cap MINUS the image reserve. This is the whole
+// mechanism — the reserve survives because cognition can never reach it, not because
+// anything guards it. Hitting zero skips a cycle rather than eating the day's images;
+// a cycle yam does not run costs nothing and it wakes again in an hour.
+export async function cognitionBudgetRemaining() {
+  const v = await budget();
+  const spentThinking = Number(v.spent_today || 0) - Number(v.spent_image_today || 0);
+  return Number(v.daily_cap_usd) - reserveOf(v) - spentThinking;
 }
 
 export async function saveNote(topic, subject, content) {

@@ -5,7 +5,7 @@
 import { writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { dirname } from 'path';
 import { createClient } from '@supabase/supabase-js';
-import { recordSpend, budgetRemaining } from './memory.js';
+import { recordSpend, imageBudgetRemaining } from './memory.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 const VENICE_BASE = process.env.VENICE_BASE || 'https://api.venice.ai/api/v1';
@@ -55,7 +55,7 @@ export async function generateImage(cycleId, prompt, {
   width = 1024, height = 1024, selfScore = null,
   seed = null, stylePreset = null, negativePrompt = null, label = null, model = null,
 } = {}) {
-  if ((await budgetRemaining()) < IMAGE_EST_COST) {
+  if ((await imageBudgetRemaining()) < IMAGE_EST_COST) {
     throw new Error(`budget exhausted for image generation`);
   }
   const body = {
@@ -100,7 +100,7 @@ export async function generateImage(cycleId, prompt, {
 // pose description gives a related composition, not the same character. Editing from the
 // canonical sheet does hold it, because the character is in the pixels being edited.
 export async function editImage(cycleId, imageUrl, prompt, { selfScore = null, label = null } = {}) {
-  if ((await budgetRemaining()) < IMAGE_EST_COST) {
+  if ((await imageBudgetRemaining()) < IMAGE_EST_COST) {
     throw new Error(`budget exhausted for image editing`);
   }
   // Accepts a public url OR a site-relative path. A study generated this minute exists on

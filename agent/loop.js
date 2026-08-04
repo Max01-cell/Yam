@@ -6,7 +6,7 @@ import { execSync } from 'child_process';
 import {
   getState, setState, recordThought, recentThoughts,
   logCrawl, proposeAction, recordSpend, recentCreations, recentActions,
-  recentNotes, saveNote, WORKING_WINDOW
+  recentNotes, saveNote, cognitionBudgetRemaining, WORKING_WINDOW
 } from './memory.js';
 import { crawlCycle } from './crawl.js';
 import { think } from './think.js';
@@ -18,9 +18,23 @@ import { buildCurriculum } from './curriculum.js';
 // Rough Sonnet pricing for the ledger; adjust if you change AGENT_MODEL.
 const IN_PER_MTOK = 3.0, OUT_PER_MTOK = 15.0;
 
+// Roughly what a cycle's cognition costs, measured from the ledger. Checked BEFORE the
+// crawl, because crawling and then discovering there is no money to think about it wastes
+// the bandwidth and the wall clock for nothing.
+const CYCLE_EST_COST = Number(process.env.CYCLE_EST_COST || 0.25);
+
 async function runCycle() {
   const cycleId = randomUUID();
   console.log(`[cycle ${cycleId}] waking`);
+
+  // think() never checked the budget, so cognition spent the entire daily cap and the
+  // day's image generation — the thing the cap was mostly there to fund — could not run.
+  // Thinking now stops at its own ceiling and leaves the image reserve alone.
+  const thinkingLeft = await cognitionBudgetRemaining();
+  if (thinkingLeft < CYCLE_EST_COST) {
+    console.log(`[cycle ${cycleId}] skipped: $${thinkingLeft.toFixed(2)} of thinking budget left, a cycle needs ~$${CYCLE_EST_COST}. The image reserve is untouched.`);
+    return;
+  }
 
   const identity = (await getState('identity')).value;
   const tasteRules = (await getState('taste_rules')).value;

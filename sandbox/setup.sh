@@ -104,8 +104,38 @@ Persistent=true
 WantedBy=timers.target
 EOF
 
+# The design run. This is the only thing that produces a converged character rather than
+# a single roll of the dice, and until now it had no timer at all — it existed solely as a
+# script somebody ran by hand, so the cast got designed exactly as often as someone
+# remembered to design it. It needs a real timeout: a session is a dozen renders plus a
+# judging call, and the 90s systemd default would SIGTERM it half way through, leaving the
+# published git tree in exactly the state the script is written to avoid.
+cat >/etc/systemd/system/agent-design.service <<EOF
+[Unit]
+Description=persona-agent character design session
+[Service]
+Type=oneshot
+User=agent
+WorkingDirectory=$AGENT_HOME
+EnvironmentFile=$AGENT_HOME/.env
+ExecStart=/usr/bin/node agent/overnight.js
+TimeoutStartSec=3600
+MemoryMax=1G
+CPUQuota=75%
+EOF
+
+cat >/etc/systemd/system/agent-design.timer <<EOF
+[Unit]
+Description=design characters once a day, bounded by the image budget reserve
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+[Install]
+WantedBy=timers.target
+EOF
+
 systemctl daemon-reload
-systemctl enable --now agent-gate.service agent-cycle.timer agent-executor.timer
+systemctl enable --now agent-gate.service agent-cycle.timer agent-executor.timer agent-design.timer
 
 echo "done. next:"
 echo "  1. fill $AGENT_HOME/.env"

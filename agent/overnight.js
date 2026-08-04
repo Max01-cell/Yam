@@ -7,24 +7,41 @@
 // It stops on budget, never on a clock, and it stops itself rather than being killed —
 // a run that has to be killed leaves a half-published git tree behind.
 
-import { budgetRemaining } from './memory.js';
+import { imageBudgetRemaining, getState } from './memory.js';
 import { runDesignSession } from './design-session.js';
 
-const FLOOR = Number(process.env.OVERNIGHT_FLOOR || 0.60);
+const FLOOR = Number(process.env.OVERNIGHT_FLOOR || 0);
 const ROUND_COST = Number(process.env.OVERNIGHT_ROUND_COST || 0.70);
-const CHARACTER = process.env.OVERNIGHT_CHARACTER || 'THRESHOLD';
+const CHARACTER = process.env.OVERNIGHT_CHARACTER || null;
+
+// Whoever needs designing most, rather than one name fixed in an env var. A character with
+// no reference sheet has never been designed at all and comes first; after that the one
+// designed longest ago. Hardcoding THRESHOLD meant every round the project ever ran was
+// spent on the same figure, which is how a cast of one stays a cast of one.
+async function nextCharacter() {
+  if (CHARACTER) return CHARACTER;
+  const cast = (await getState('cast').catch(() => null))?.value ?? null;
+  const entries = Object.entries(cast?.characters ?? {});
+  if (!entries.length) return null;
+  const undesigned = entries.filter(([, c]) => !c?.reference);
+  const pool = undesigned.length ? undesigned : entries;
+  pool.sort((a, b) => String(a[1]?.designed_at ?? '').localeCompare(String(b[1]?.designed_at ?? '')));
+  return pool[0][0];
+}
 
 let round = 0;
 while (true) {
-  const left = await budgetRemaining();
+  const left = await imageBudgetRemaining();
   if (left < FLOOR + ROUND_COST) {
     console.log(`[overnight] stopping after ${round} round(s): $${left.toFixed(2)} left, a round needs $${ROUND_COST}`);
     break;
   }
+  const character = await nextCharacter();
+  if (!character) { console.log('[overnight] the cast is empty — nothing to design'); break; }
   round += 1;
-  console.log(`\n[overnight] === round ${round} — $${left.toFixed(2)} available ===`);
+  console.log(`\n[overnight] === round ${round}: ${character} — $${left.toFixed(2)} available ===`);
   try {
-    const r = await runDesignSession({ character: CHARACTER, explore: 6, variations: 6 });
+    const r = await runDesignSession({ character, explore: 6, variations: 6 });
     console.log(`[overnight] round ${round}: ${JSON.stringify(r)}`);
     if (!r.ran) { console.log('[overnight] round produced nothing; stopping rather than burning the cap'); break; }
   } catch (e) {

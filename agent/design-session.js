@@ -19,18 +19,24 @@
 import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import Anthropic from '@anthropic-ai/sdk';
-import { getState, setState, budgetRemaining, saveNote } from './memory.js';
+import { getState, setState, imageBudgetRemaining, saveNote } from './memory.js';
 import { generateImage, sniffImage } from './venice.js';
 import { mergeCast, recordReference, normaliseName } from './cast.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const JUDGE_MODEL = process.env.AGENT_MODEL || 'claude-sonnet-4-6';
-const DESIGN_MODEL = process.env.VENICE_DESIGN_MODEL || 'recraft-v4';
+export const DESIGN_MODEL = process.env.VENICE_DESIGN_MODEL || 'recraft-v4';
+export const DESIGN_PRESET = process.env.VENICE_DESIGN_PRESET || 'Line Art';
 const IMAGE_COST = Number(process.env.VENICE_DESIGN_COST || 0.05);
-const FLOOR = Number(process.env.DESIGN_BUDGET_FLOOR || 0.60); // leave room for the hourly cycles
+// Was 0.60, to leave room for the hourly cycles. Cognition now has its own ceiling and
+// cannot reach the image reserve, so holding money back from designing is money that
+// simply goes unspent — the floor stays configurable but defaults to nothing held back.
+const FLOOR = Number(process.env.DESIGN_BUDGET_FLOOR || 0);
 
 // Written for a renderer. Every clause is a decision the judge can check against.
-const NEGATIVE = 'colour, color, coloured, painted, grayscale photo, background scenery, gradient, '
+// Exported because the per-cycle venice_generate path needs exactly the same guard rails:
+// the same model asked for a character without these clauses returns the orange gi.
+export const NEGATIVE = 'colour, color, coloured, painted, grayscale photo, background scenery, gradient, '
   + 'spiky anime hair, martial arts uniform, orange gi, superhero costume, armour, cape, bodybuilder, '
   + 'existing anime character, recognisable franchise character, logo, emblem, watermark, signature, text, '
   + 'multiple unrelated characters, cute chibi, generic handsome man, t-shirt and jeans';
@@ -56,9 +62,20 @@ function briefFor(base, axis) {
   return `ink line art character model sheet on plain white paper, black ink only. `
     + `ONE original figure drawn twice: full-body front view and full-body three-quarter view. `
     + `${base} ${axis}. `
-    + `heavy committed black contour on the spine and the raised shoulder, terminating without tapering. `
-    + `fine hatching inside the torso. solid black shapes in the negative spaces under the raised shoulder. `
+    + `heavy committed black contour along the spine and the load-bearing side, terminating without tapering. `
+    + `fine hatching inside the torso. solid black shapes in the deepest negative spaces. `
     + `a dashed horizontal ground line at the feet. no background, no colour, no text.`;
+}
+
+// The silhouette brief comes from the CHARACTER, not from a constant. This was
+// THRESHOLD's raised shoulder hardcoded into the function, which was harmless while
+// THRESHOLD was the only character a session ever ran for and becomes a way of rendering
+// THRESHOLD's body under somebody else's name the moment the run rotates across the cast.
+function baseFor(entry) {
+  const from = String(entry?.appearance || entry?.canon || '').replace(/\s+/g, ' ').trim();
+  return from
+    ? from.slice(0, 320)
+    : 'an original figure with a silhouette nobody else has drawn, standing at a boundary.';
 }
 
 // Read the bytes off disk, not off yam.garden. A freshly generated study exists locally
@@ -105,16 +122,16 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
   if (!entry) return { ran: false, reason: `no character named ${character} in the cast` };
 
   const canon = `${entry.canon}\n\nOpen questions the design should answer: ${(entry.open_questions ?? []).join(' | ')}`;
-  const base = 'a tall lean figure whose LEFT SHOULDER SITS CLEARLY HIGHER than the right, standing at a boundary.';
+  const base = baseFor(entry);
 
   // ---- explore -------------------------------------------------------------
   const candidates = [];
   for (let i = 0; i < explore; i++) {
-    if ((await budgetRemaining()) < FLOOR + IMAGE_COST) { log('budget floor reached during exploration'); break; }
+    if ((await imageBudgetRemaining()) < FLOOR + IMAGE_COST) { log('budget floor reached during exploration'); break; }
     const axis = AXES[i % AXES.length];
     try {
       const out = await generateImage(null, briefFor(base, axis), {
-        model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: 'Line Art',
+        model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: DESIGN_PRESET,
         width: 1024, height: 1024, label: `${character}-explore-${i + 1}`,
       });
       candidates.push({ axis, url: out.publicUrl, rel: out.rel, ...localImage(out.rel) });
@@ -147,22 +164,22 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
   // ---- variations ----------------------------------------------------------
   // Edited FROM the winning sheet, never regenerated: the likeness lives in the pixels.
   const POSES = [
-    'the same figure, three-quarter turn, looking back over the high shoulder',
+    'the same figure, three-quarter turn, looking back over one shoulder',
     'the same figure seen from behind, walking away, weight on the back foot',
     'the same figure crouched low, forearms on the knees',
     'the same figure mid-stride, crossing the dashed line',
-    'the same figure seated on the ground, the high shoulder against a wall',
-    'the same figure reaching upward with the long arm, body extended',
+    'the same figure seated on the ground, one shoulder against a wall',
+    'the same figure reaching upward, body fully extended',
     'the same figure in a heavy hooded cloak, hem to the ground',
     'the same figure in stripped-down working clothes, sleeves rolled, forearms bare',
     'close study of the head and shoulders only, three-quarter view',
     'the same figure lying down, seen from above',
-    'the same figure carrying a wrapped bundle roped to the high shoulder',
+    'the same figure carrying a wrapped bundle roped across the back',
     'the same figure standing in heavy rain, cloth soaked and clinging',
   ];
   const made = [];
   for (let i = 0; i < Math.min(variations, POSES.length); i++) {
-    if ((await budgetRemaining()) < FLOOR + IMAGE_COST) { log('budget floor reached during variations'); break; }
+    if ((await imageBudgetRemaining()) < FLOOR + IMAGE_COST) { log('budget floor reached during variations'); break; }
     try {
       // Generated with the character's permanent seed rather than edited from the sheet.
       // /image/edit has no strength control and no selectable model, so it reinterprets:
@@ -171,7 +188,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
       const out = await generateImage(null,
         `ink line art, black ink on plain white paper, ONE figure only. ${appearance} ${POSES[i]}. `
         + `heavy committed contour, fine hatching, solid blacks, dashed ground line, no colour, no text.`,
-        { model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: 'Line Art',
+        { model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: DESIGN_PRESET,
           seed: entry.seed, width: 1024, height: 1024, label: `${character}-pose-${i + 1}` });
       made.push({ pose: POSES[i], url: out.publicUrl });
       log(`variation ${i + 1}: ${POSES[i].slice(0, 50)}`);
@@ -195,5 +212,5 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
       + `${made.length} pose and outfit variations produced from the canonical sheet.`);
   } catch { /* a note failure must not fail the session */ }
 
-  return { ran: true, explored: candidates.length, winner: win.url, variations: made.length, remaining: await budgetRemaining() };
+  return { ran: true, explored: candidates.length, winner: win.url, variations: made.length, remaining: await imageBudgetRemaining() };
 }

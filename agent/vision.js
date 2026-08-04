@@ -2,7 +2,7 @@
 // Uses Claude's vision via the same Anthropic SDK. Fetches an image URL,
 // sends it as a base64 image block, returns yam's structured observation.
 import Anthropic from '@anthropic-ai/sdk';
-import { recordSpend, budgetRemaining } from './memory.js';
+import { recordSpend, cognitionBudgetRemaining } from './memory.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const VISION_MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-6';
@@ -58,7 +58,7 @@ export async function searchCommons(query, limit = 5) {
 }
 
 export async function look(cycleId, imageUrl, question, searchQuery) {
-  if ((await budgetRemaining()) < VISION_EST_COST) throw new Error('budget exhausted for vision');
+  if ((await cognitionBudgetRemaining()) < VISION_EST_COST) throw new Error('budget exhausted for vision');
   // Resolution chain. yam may name a subject instead of a URL; and a URL that
   // 404s is recovered by filename, then by search — because the usual failure
   // is not a wrong hash but an invented filename.

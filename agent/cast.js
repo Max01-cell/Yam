@@ -118,6 +118,7 @@ export function mergeCast(prev, update) {
       studies: Number(existing?.studies ?? 0) || 0,
       last_study: existing?.last_study ?? null,
       reference: existing?.reference ?? null,
+      designed_at: existing?.designed_at ?? null,
       seed: existing?.seed ?? seedFor(key ?? name),
     };
   }
@@ -146,6 +147,7 @@ export function recordStudy(prev, name, studyUrl) {
     studies: (Number(existing?.studies ?? 0) || 0) + 1,
     last_study: studyUrl || existing?.last_study || null,
     reference: existing?.reference ?? null,
+    designed_at: existing?.designed_at ?? null,
     seed: existing?.seed ?? seedFor(key),
   };
   return base;
@@ -172,6 +174,9 @@ export function recordReference(prev, name, url) {
     studies: Number(existing?.studies ?? 0) || 0,
     last_study: existing?.last_study ?? null,
     reference: url,
+    // When this character was last designed, not merely drawn. The scheduled design run
+    // rotates on it, so a character that already has a sheet stops absorbing every round.
+    designed_at: new Date().toISOString(),
     seed: existing?.seed ?? seedFor(key),
   };
   return base;

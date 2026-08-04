@@ -16,7 +16,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  getState, setState, saveNote, recordSpend, budgetRemaining,
+  getState, setState, saveNote, recordSpend, cognitionBudgetRemaining,
   workingWindowFloorId, thoughtsBetween, notebookTopics, WORKING_WINDOW,
 } from './memory.js';
 
@@ -106,7 +106,7 @@ export async function runConsolidation({ identity, cycleId = null, windowSize = 
   if (!shouldConsolidate(rows)) {
     return { ran: false, reason: `${rows.length} aged thoughts waiting, need ${MIN_BATCH}` };
   }
-  if ((await budgetRemaining().catch(() => 0)) < EST_COST) {
+  if ((await cognitionBudgetRemaining().catch(() => 0)) < EST_COST) {
     return { ran: false, reason: 'budget exhausted for consolidation' };
   }
 
