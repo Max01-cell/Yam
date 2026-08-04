@@ -33,9 +33,16 @@ export function decodeEntities(s) {
   });
 }
 
-// A real extension, optionally followed by a query. This single rule is what
-// separates images from beacons, trackers and API endpoints.
+// A real extension separates images from beacons — but ONLY where the source
+// told us nothing. When markup positively declares an image (media:thumbnail,
+// or a type/medium that says image), the declaration is better evidence than a
+// file suffix, and demanding a suffix anyway throws away whole CDNs. Vimeo
+// serves 960px thumbnails at paths ending -d_960?region=us: no extension, ten
+// real images per feed, all of them silently discarded by an extension gate.
 const IMAGE_EXT = /\.(?:jpe?g|png|webp|gif)(?:$|[?#])/i;
+
+// Explicitly not an image, whatever the url looks like.
+const NOT_IMAGE = /^(?:video|audio|application)\//i;
 
 // Furniture, not artwork. Matched against the whole URL including host, which
 // is what catches b.thumbs.redditmedia.com.
@@ -58,22 +65,38 @@ export function imageIdentity(url) {
   return url.replace(/[?#].*$/, '').replace(DIM_SUFFIX, '');
 }
 
-export function extractImages(raw, baseUrl, { limit = 4, minKnownWidth = 400 } = {}) {
+export function extractImages(raw, baseUrl, { limit = 8, minKnownWidth = 400 } = {}) {
   const text = decodeEntities(String(raw ?? ''));
   const found = [];
-  const push = (u, w) => { if (u) found.push({ raw: u, width: w ?? null }); };
+  // declared=true means the markup asserted this is an image. Only unverified
+  // candidates have to prove it with a file extension.
+  const push = (u, w, declared = false, denied = false) => {
+    if (u) found.push({ raw: u, width: w ?? null, declared, denied });
+  };
 
   // media:content / media:thumbnail / enclosure — attribute order varies by publisher
-  for (const m of text.matchAll(/<(?:media:content|media:thumbnail|enclosure)\b([^>]*)>/gi)) {
-    const attrs = m[1];
+  for (const m of text.matchAll(/<(media:content|media:thumbnail|enclosure)\b([^>]*)>/gi)) {
+    const tag = m[1].toLowerCase();
+    const attrs = m[2];
     const url = (attrs.match(/\burl\s*=\s*["']([^"']+)["']/i) || [])[1];
-    const type = (attrs.match(/\btype\s*=\s*["']([^"']+)["']/i) || [])[1];
-    if (!url || (type && !/^image\//i.test(type))) continue;
-    push(url, (attrs.match(/\bwidth\s*=\s*["']?(\d+)/i) || [])[1]);
+    if (!url) continue;
+    const type = (attrs.match(/\btype\s*=\s*["']([^"']+)["']/i) || [])[1] || '';
+    const medium = ((attrs.match(/\bmedium\s*=\s*["']([^"']+)["']/i) || [])[1] || '').toLowerCase();
+    // Recorded as denied rather than skipped: dropping it here only means the
+    // bare-url pass finds the same address a moment later and lets it through.
+    // A rejection has to attach to the image, not to the sighting.
+    if (NOT_IMAGE.test(type) || medium === 'video' || medium === 'audio') {
+      push(url, null, false, true);
+      continue;
+    }
+    // media:thumbnail is an image by definition; the others must say so.
+    const declared = tag === 'media:thumbnail' || /^image\//i.test(type) || medium === 'image';
+    push(url, (attrs.match(/\bwidth\s*=\s*["']?(\d+)/i) || [])[1], declared);
   }
   for (const m of text.matchAll(/<meta\b[^>]*?(?:property|name)\s*=\s*["']og:image(?::url)?["'][^>]*>/gi)) {
-    push((m[0].match(/\bcontent\s*=\s*["']([^"']+)["']/i) || [])[1], null);
+    push((m[0].match(/\bcontent\s*=\s*["']([^"']+)["']/i) || [])[1], null, true);
   }
+  // <img> and bare urls are where beacons live, so these stay unverified.
   for (const m of text.matchAll(/<img\b([^>]*)>/gi)) {
     const attrs = m[1];
     push((attrs.match(/\bsrc\s*=\s*["']([^"']+)["']/i) || [])[1],
@@ -92,15 +115,20 @@ export function extractImages(raw, baseUrl, { limit = 4, minKnownWidth = 400 } =
     let abs;
     try { abs = new URL(String(f.raw).trim(), baseUrl).href; } catch { continue; }
     if (!/^https?:/i.test(abs)) continue;
-    if (!IMAGE_EXT.test(abs)) continue;
-    if (FURNITURE.test(abs)) continue;
+    // A denied sighting must always reach its group so it can poison it.
+    if (!f.denied) {
+      // The extension gate applies only where nothing declared this an image.
+      if (!f.declared && !IMAGE_EXT.test(abs)) continue;
+      if (FURNITURE.test(abs)) continue;
+    }
     const key = imageIdentity(abs);
     if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push({ url: abs, width: declaredWidth(abs, f.width) });
+    groups.get(key).push({ url: abs, width: declaredWidth(abs, f.width), denied: f.denied });
   }
 
   const out = [];
   for (const sightings of groups.values()) {
+    if (sightings.some(s => s.denied)) continue;
     const known = sightings.map(s => s.width).filter(w => w != null);
     // Only condemn on evidence: if every width we know about is too small, the
     // image is too small. If no width was ever declared, give it the benefit.
@@ -113,15 +141,31 @@ export function extractImages(raw, baseUrl, { limit = 4, minKnownWidth = 400 } =
 }
 
 // One flat list for the prompt, with provenance, capped so the block stays cheap.
-export function collectImages(crawled, { perSource = 3, total = 12 } = {}) {
-  const out = [];
-  for (const c of crawled ?? []) {
+// Allocation is round-robin rather than a fixed slice per source: a hard per-source
+// cap assumed a broad diet, and starves yam precisely when the diet has narrowed to
+// one productive source — the moment it most needs whatever that source has.
+export function collectImages(crawled, { total = 12 } = {}) {
+  const queues = (crawled ?? []).map(c => {
     let host = c.url;
     try { host = new URL(c.url).host.replace(/^www\./, ''); } catch { /* keep raw */ }
-    for (const url of (c.images ?? []).slice(0, perSource)) {
-      if (out.length >= total) return out;
-      if (!out.some(o => o.url === url)) out.push({ url, from: host });
+    return { host, images: [...(c.images ?? [])] };
+  });
+  const out = [];
+  const seen = new Set();
+  let round = 0;
+  while (out.length < total) {
+    let took = false;
+    for (const q of queues) {
+      if (round >= q.images.length) continue;
+      took = true;
+      const url = q.images[round];
+      if (seen.has(url)) continue;
+      seen.add(url);
+      out.push({ url, from: q.host });
+      if (out.length >= total) break;
     }
+    if (!took) break;
+    round += 1;
   }
   return out;
 }

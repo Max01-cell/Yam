@@ -87,8 +87,8 @@ t('decodes &amp; inside a harvested url', () => {
 });
 
 t('honours the per-source limit', () => {
-  const many = Array.from({ length: 9 }, (_, i) => `<img src="https://x.test/p${i}.jpg">`).join('');
-  assert.strictEqual(one(many).length, 4);
+  const many = Array.from({ length: 12 }, (_, i) => `<img src="https://x.test/p${i}.jpg">`).join('');
+  assert.strictEqual(one(many).length, 8);
   assert.strictEqual(one(many, { limit: 2 }).length, 2);
 });
 
@@ -103,6 +103,76 @@ t('malformed markup does not throw', () => {
 t('empty input is empty output, not a crash', () => {
   assert.deepStrictEqual(one(''), []);
   assert.deepStrictEqual(extractImages(null, BASE), []);
+});
+
+console.log('\ndeclared image containers — the vimeo regression:');
+
+t('recovers extensionless 960px thumbnails from a real vimeo item', () => {
+  const got = one(REAL.vimeoItem);
+  assert.strictEqual(got.length, 1, `got ${got.length}: ${got.join(' | ')}`);
+  assert.ok(got[0].includes('i.vimeocdn.com/video/'), got[0]);
+  assert.ok(!/\.(jpe?g|png|webp|gif)/i.test(got[0]), 'fixture should have no extension at all');
+});
+
+t('does not leak the player or video url from the same item', () => {
+  const got = one(REAL.vimeoItem);
+  assert.strictEqual(got.filter(u => /player\.vimeo|\.mp4/.test(u)).length, 0);
+});
+
+t('still rejects extensionless channel branding', () => {
+  assert.deepStrictEqual(one(REAL.vimeoBranding), []);
+});
+
+t('a whole vimeo feed yields one image per item', () => {
+  const feed = [REAL.vimeoBranding, REAL.vimeoItem,
+                REAL.vimeoItem.replace(/2177134176/g, '2169341475')].join('');
+  assert.strictEqual(one(feed).length, 2);
+});
+
+t('media:content declaring video is dropped even when the url looks like an image', () => {
+  assert.deepStrictEqual(one('<media:content medium="video" url="https://x.test/frame.jpg"/>'), []);
+  assert.deepStrictEqual(one('<enclosure type="video/mp4" url="https://x.test/a.jpg"/>'), []);
+  assert.deepStrictEqual(one('<enclosure type="audio/mpeg" url="https://x.test/a.jpg"/>'), []);
+});
+
+t('an image type or medium is trusted without an extension', () => {
+  assert.strictEqual(one('<media:content medium="image" url="https://x.test/plate?id=9"/>').length, 1);
+  assert.strictEqual(one('<enclosure type="image/jpeg" url="https://x.test/plate?id=9"/>').length, 1);
+  assert.strictEqual(one('<meta property="og:image" content="https://x.test/plate?id=9">').length, 1);
+});
+
+t('an undeclared container still has to prove it with an extension', () => {
+  assert.deepStrictEqual(one('<media:content url="https://x.test/mystery?id=9"/>'), []);
+  assert.strictEqual(one('<media:content url="https://x.test/real.jpg"/>').length, 1);
+});
+
+t('trust does NOT extend to img tags, where the beacons live', () => {
+  assert.deepStrictEqual(one(REAL.mediumBeacon), [], 'beacon regression');
+  assert.deepStrictEqual(one('<img src="https://x.test/track?ev=1">'), []);
+});
+
+t('declared images are still size-filtered and furniture-filtered', () => {
+  assert.deepStrictEqual(one('<media:thumbnail width="90" url="https://x.test/small"/>'), []);
+  assert.deepStrictEqual(one('<media:thumbnail width="900" url="https://x.test/site-logo"/>'), []);
+});
+
+console.log('\nimage allocation:');
+
+t('one productive source is not throttled when the others are empty', () => {
+  const out = collectImages([
+    { url: 'https://thisiscolossal.com/feed/', images: Array.from({ length: 9 }, (_, i) => `https://c.test/${i}.jpg`) },
+    { url: 'https://vimeo.com/f', images: [] },
+  ]);
+  assert.strictEqual(out.length, 9, `a lone source should supply the block, got ${out.length}`);
+});
+
+t('but many sources still share the block round-robin', () => {
+  const out = collectImages([
+    { url: 'https://a.test/f', images: ['https://a.test/1.jpg', 'https://a.test/2.jpg', 'https://a.test/3.jpg'] },
+    { url: 'https://b.test/f', images: ['https://b.test/1.jpg', 'https://b.test/2.jpg'] },
+  ]);
+  assert.deepStrictEqual(out.map(o => o.from), ['a.test', 'b.test', 'a.test', 'b.test', 'a.test'],
+    'sources should interleave, not be taken in blocks');
 });
 
 console.log('\nharvest helpers:');
@@ -226,6 +296,67 @@ t('malformed urls are skipped, not crashed on', () => {
   assert.doesNotThrow(() => formatDietStats([{ url: 'not a url', interest_score: 5 }]));
 });
 t('empty history says so', () => assert.ok(formatDietStats([]).includes('no crawl history')));
+
+console.log('\ndiet legibility:');
+const { formatDiet } = await import('../agent/recall.js');
+
+t('shows the exact feed list, numbered', () => {
+  const out = formatDiet({ feeds: ['https://a.test/f', 'https://b.test/f'] });
+  assert.ok(out.startsWith('1. https://a.test/f'), out);
+  assert.ok(out.includes('2. https://b.test/f'));
+});
+t('an unset diet says the seed list is in use', () => {
+  assert.ok(formatDiet(null).includes('default seed list'));
+  assert.ok(formatDiet({ feeds: [] }).includes('default seed list'));
+});
+t('a shrink is stated in full, with what was dropped', () => {
+  const out = formatDiet({
+    feeds: ['https://a.test/f'],
+    retired: ['https://x.test/f'],
+    last_change: { at: '2026-08-03T21:00:00Z', removed: ['https://b.test/f', 'https://c.test/f'], added: [], from: 3, to: 1 },
+  });
+  assert.ok(out.includes('dropped 2'), out);
+  assert.ok(out.includes('3 sources became 1'), out);
+  assert.ok(out.includes('https://b.test/f') && out.includes('https://c.test/f'));
+});
+t('retired feeds are offered back for restoration', () => {
+  const out = formatDiet({ feeds: ['https://a.test/f'], retired: ['https://old.test/f'] });
+  assert.ok(out.includes('could crawl again'), out);
+  assert.ok(out.includes('https://old.test/f'));
+});
+t('a no-op change is not announced', () => {
+  const out = formatDiet({ feeds: ['https://a.test/f'], last_change: { at: 'x', removed: [], added: [], from: 1, to: 1 } });
+  assert.ok(!out.includes('last diet change'), out);
+});
+
+console.log('\ncrawl failures are returned, not swallowed:');
+const http = await import('http');
+const { crawlCycle } = await import('../agent/crawl.js');
+const srv = http.createServer((q, r) => {
+  if (q.url === '/good') { r.writeHead(200, { 'content-type': 'application/rss+xml' }); return r.end(REAL.vimeoItem); }
+  if (q.url === '/empty') { r.writeHead(200); return r.end(''); }
+  r.writeHead(404); r.end('nope');
+});
+await new Promise(r => srv.listen(54401, '127.0.0.1', r));
+const B = 'http://127.0.0.1:54401';
+const crawl = await crawlCycle([], [`${B}/good`, `${B}/missing`, `${B}/empty`]);
+srv.close();
+
+t('a live feed still yields content and images', () => {
+  assert.strictEqual(crawl.sources.length, 1);
+  assert.strictEqual(crawl.sources[0].images.length, 1);
+  assert.ok(crawl.sources[0].content.length > 0);
+});
+t('a 404 is reported with its status, not dropped', () => {
+  const f = crawl.failures.find(x => x.url.endsWith('/missing'));
+  assert.ok(f, 'the 404 vanished silently');
+  assert.strictEqual(f.error, 'HTTP 404');
+});
+t('a 200 with an empty body counts as a failure', () => {
+  const f = crawl.failures.find(x => x.url.endsWith('/empty'));
+  assert.ok(f, 'empty body was treated as a live source');
+  assert.ok(/empty/.test(f.error), f.error);
+});
 
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

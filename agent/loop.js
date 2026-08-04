@@ -27,8 +27,9 @@ async function runCycle() {
   const recallTopics = project.value?.recall_topics ?? [];
   const diet = await getState('diet').catch(() => null);
 
-  const crawled = await crawlCycle(revisit, diet?.value?.feeds);
-  console.log(`[cycle ${cycleId}] crawled ${crawled.length} sources`);
+  const { sources: crawled, failures } = await crawlCycle(revisit, diet?.value?.feeds);
+  console.log(`[cycle ${cycleId}] crawled ${crawled.length} sources, ${failures.length} failed`);
+  for (const f of failures) console.log(`[cycle ${cycleId}]   FAILED ${f.url}: ${f.error}`);
 
   // Compact what has aged out BEFORE reading the notebook back, so anything
   // distilled this pass is already in the notebook yam sees below.
@@ -44,10 +45,10 @@ async function runCycle() {
     .join('\n');
   const myWork = await recentCreations(8).catch(() => []);
   const consolidationState = (await getState('consolidation').catch(() => null))?.value ?? null;
-  const archive = await buildArchive({ consolidationState });
+  const archive = await buildArchive({ consolidationState, dietState: diet?.value ?? null });
   const recalled = await buildRecalled(recallTopics);
   if (recallTopics.length) console.log(`[cycle ${cycleId}] recalled: ${recallTopics.join(', ')} (${recalled.length} chars)`);
-  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook, archive, recalled });
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook, archive, recalled, failures });
 
   // Ledger the thinking cost
   const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK
@@ -74,11 +75,28 @@ async function runCycle() {
   const mu = parsed.memory_updates ?? {};
   if (mu.obsessions) await setState('obsessions', mu.obsessions);
   if (mu.taste_rules) await setState('taste_rules', mu.taste_rules);
+  // Setting diet REPLACES the feed list. yam's prompt asks it to name the feeds
+  // it wants, so a reply naming the two it is currently interested in silently
+  // destroys the other six — which is how a diet of eight sources became two.
+  // The write still obeys yam; it just stops being invisible. What was dropped
+  // is retained so yam can see the shrink happen and put anything back.
   if (Array.isArray(mu.diet?.feeds)) {
-    const feeds = mu.diet.feeds
-      .filter(u => typeof u === 'string' && /^https?:\/\//.test(u))
-      .slice(0, 10);
-    if (feeds.length) await setState('diet', { feeds });
+    const feeds = [...new Set(mu.diet.feeds
+      .filter(u => typeof u === 'string' && /^https?:\/\//.test(u)))].slice(0, 10);
+    if (feeds.length) {
+      const before = diet?.value?.feeds ?? [];
+      const removed = before.filter(u => !feeds.includes(u));
+      const added = feeds.filter(u => !before.includes(u));
+      const changed = removed.length > 0 || added.length > 0;
+      await setState('diet', {
+        feeds,
+        retired: [...new Set([...removed, ...(diet?.value?.retired ?? [])])].slice(0, 20),
+        last_change: changed
+          ? { at: new Date().toISOString(), removed, added, from: before.length, to: feeds.length }
+          : (diet?.value?.last_change ?? null),
+      });
+      if (changed) console.log(`[cycle ${cycleId}] diet ${before.length} -> ${feeds.length}: -${removed.length} +${added.length}`);
+    }
   }
   await setState('current_project', {
     ...(mu.current_project ?? project.value ?? {}),

@@ -53,10 +53,10 @@ WHAT A GENERATED IMAGE IS. It is an ILLUSTRATED FINDING, not your hand — a pla
 You keep a permanent study notebook. Include study_note = {topic, subject, content} to save a craft insight durably (e.g. topic:'line-weight', subject:'Urasawa vs Otomo', content:'...'). Your notebook is shown to you each cycle — reference and extend it instead of rediscovering the same ideas. This is how your knowledge compounds across weeks.
 YOU HAVE AN ARCHIVE OLDER THAN YOUR MEMORY. Your thoughts scroll: you see roughly the last six cycles of them and no further back. But nothing is lost — your notebook, and every entry you have published, are still there. Each cycle you are shown an INDEX of both: every topic you have ever filed a note under, and every entry you have published. The index is a list of what exists, not the thing itself. To read something back in full, set recall_topics to up to 3 subjects, and next cycle the matching notes and published entries arrive in full text. This works exactly like revisit_urls: you ask now, you receive next cycle. Use it when you are about to write about something you suspect you have already worked out, when a topic in the index is one you no longer remember making, or when you are about to publish an entry that may repeat one you already published. Re-deriving something you already wrote is the most expensive mistake available to you.
 Quality bar: only propose content you would score 80+. No filler.
-You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle.`;
+You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle. This REPLACES your entire feed list rather than adding to it, so send every feed you want to keep, not only the ones you are adding. Your current list is shown to you each cycle under YOUR DIET RIGHT NOW — copy from it. Sending two urls when you meant 'also these two' leaves you crawling two sources.`;
 }
 
-export async function think({ identity, tasteRules, recentThoughts, crawled, myWork = [], actionHistory, studyNotebook, archive = '', recalled = '' }) {
+export async function think({ identity, tasteRules, recentThoughts, crawled, myWork = [], actionHistory, studyNotebook, archive = '', recalled = '', failures = [] }) {
   const material = crawled
     .map(c => `SOURCE: ${c.url}\n${c.content.slice(0, 4000)}`)
     .join('\n\n---\n\n');
@@ -90,6 +90,9 @@ export async function think({ identity, tasteRules, recentThoughts, crawled, myW
         (actionHistory ? `YOUR RECENT ACTIONS AND THEIR FATES:\n${actionHistory}\n\n` : '') +
         (imageBlock
           ? `IMAGES YOU SAW THIS CYCLE (real urls taken from the bytes you just crawled — copy one verbatim into a look payload; you did not have to remember any of these):\n${imageBlock}\n\n`
+          : '') +
+        (failures.length
+          ? `SOURCES THAT FAILED THIS CYCLE (they are still in your diet but returned nothing — a feed that keeps failing is costing you a slot):\n${failures.map(f => `${f.url} — ${f.error}`).join('\n')}\n\n`
           : '') +
         `FRESH MATERIAL FROM THIS CYCLE'S CRAWL:\n${material || '(crawl came back empty)'}\n\n` +
         `Think. Then respond with the JSON only.`

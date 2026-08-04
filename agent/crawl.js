@@ -21,11 +21,12 @@ async function fetchText(url, timeoutMs = 12000) {
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     const res = await fetch(url, { headers: { 'user-agent': UA }, signal: ctrl.signal });
-    if (!res.ok) return null;
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const text = await res.text();
-    return text.slice(0, 60_000);
-  } catch {
-    return null;
+    if (!text.trim()) return { ok: false, error: 'empty response body' };
+    return { ok: true, text: text.slice(0, 60_000) };
+  } catch (e) {
+    return { ok: false, error: e.name === 'AbortError' ? `no response in ${timeoutMs / 1000}s` : e.message };
   } finally {
     clearTimeout(t);
   }
@@ -42,20 +43,25 @@ function stripToReadable(raw) {
     .slice(0, 8000);
 }
 
-// Returns [{ url, content, images }] — raw material for the mind.
+// Returns { sources: [{ url, content, images }], failures: [{ url, error }] }.
 // Images are harvested from the RAW bytes, before stripToReadable removes every
 // tag: that strip is why yam's diet has been text-only, and why its look action
 // has had to guess at URLs instead of using one it actually saw.
+//
+// Failures are returned rather than skipped. A feed that has quietly 404'd for a
+// week is indistinguishable, from inside the cycle, from a feed yam removed on
+// purpose — and yam cannot fix what it cannot see.
 export async function crawlCycle(extraUrls = [], feeds) {
   const targets = [...(feeds?.length ? feeds : DEFAULT_FEEDS), ...extraUrls.slice(0, 5)];
-  const results = [];
+  const sources = [];
+  const failures = [];
   for (const url of targets) {
-    const raw = await fetchText(url);
-    if (!raw) continue;
+    const res = await fetchText(url);
+    if (!res.ok) { failures.push({ url, error: res.error }); continue; }
     let images = [];
-    try { images = extractImages(raw, url); }
+    try { images = extractImages(res.text, url); }
     catch (e) { console.warn(`image harvest failed for ${url}: ${e.message}`); }
-    results.push({ url, content: stripToReadable(raw), images });
+    sources.push({ url, content: stripToReadable(res.text), images });
   }
-  return results;
+  return { sources, failures };
 }

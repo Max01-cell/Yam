@@ -111,6 +111,32 @@ export function formatNotes(notes) {
     .join('\n\n');
 }
 
+// The feed list yam is actually crawling, plus what its last change did. This is
+// written to memory_state every cycle and has never been read back, so yam has
+// had no way to see its own diet — only to experience a thinner cycle.
+export function formatDiet(dietState) {
+  const feeds = dietState?.feeds ?? [];
+  const lines = [feeds.length
+    ? feeds.map((u, i) => `${i + 1}. ${u}`).join('\n')
+    : '(no diet set — you are crawling the default seed list)'];
+
+  const c = dietState?.last_change;
+  if (c && ((c.removed?.length ?? 0) || (c.added?.length ?? 0))) {
+    const when = String(c.at ?? '').replace('T', ' ').slice(0, 16);
+    const bits = [];
+    if (c.removed?.length) bits.push(`dropped ${c.removed.length}`);
+    if (c.added?.length) bits.push(`added ${c.added.length}`);
+    lines.push(`Your last diet change (${when}) ${bits.join(' and ')}: ${c.from} sources became ${c.to}.`);
+    if (c.removed?.length) lines.push(`It dropped: ${c.removed.join(', ')}`);
+  }
+
+  const retired = dietState?.retired ?? [];
+  if (retired.length) {
+    lines.push(`Feeds you have dropped and could crawl again by naming them: ${retired.join(', ')}`);
+  }
+  return lines.join('\n');
+}
+
 // What yam's diet has actually been worth, per source. Counts and averages only:
 // an instrument reading, like the spend ledger. What to do about it is yam's call.
 export function formatDietStats(rows) {
@@ -141,7 +167,7 @@ export function formatConsolidationStatus(state) {
 }
 
 // The always-on block: what yam HAS, without the cost of showing all of it.
-export async function buildArchive({ consolidationState = null, dir = entryDir() } = {}) {
+export async function buildArchive({ consolidationState = null, dietState = null, dir = entryDir() } = {}) {
   const sections = [];
   try {
     sections.push(`YOUR NOTEBOOK — EVERY TOPIC YOU HAVE EVER FILED (topic (count) — subjects):\n${formatNotebookIndex(await notebookTopics())}`);
@@ -149,6 +175,7 @@ export async function buildArchive({ consolidationState = null, dir = entryDir()
     sections.push(`YOUR NOTEBOOK INDEX IS UNREADABLE THIS CYCLE: ${e.message}`);
   }
   sections.push(`WHAT YOU HAVE PUBLISHED (site/thoughts — ask for any of these by name):\n${formatPublishedIndex(publishedIndex(dir))}`);
+  sections.push(`YOUR DIET RIGHT NOW (the exact feed list you crawl. memory_updates.diet REPLACES this whole list — it does not add to it, so every feed you want to keep must appear in what you send):\n${formatDiet(dietState)}`);
   try {
     sections.push(`YOUR DIET, MEASURED (every source you have crawled, how often, and how interesting you scored it — you control this list):\n${formatDietStats(await crawlStats())}`);
   } catch (e) {
