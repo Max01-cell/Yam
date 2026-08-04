@@ -147,7 +147,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
   // names and the second silently overwrote the first — a round's work destroyed on disk
   // while its urls stayed in the ledger pointing at somebody else's bytes. The tag makes
   // each session's output its own set of files.
-  const stamp = tag ?? new Date().toISOString().slice(11, 16).replace(':', '');
+  const stamp = tag ?? new Date().toISOString().slice(11, 19).replace(/:/g, '');
   // A session is a cycle for accounting purposes. It passed null and every creations row
   // was rejected by a NOT NULL constraint, so the whole session's output stayed off the site.
   const sessionId = randomUUID();

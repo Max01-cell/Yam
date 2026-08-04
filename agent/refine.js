@@ -141,7 +141,12 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
     }
 
     const sessionId = randomUUID();
-    const stamp = new Date().toISOString().slice(11, 16).replace(':', '');
+    // Seconds AND a random suffix. An HH:MM stamp collided the first time two runs happened
+    // in the same minute: the second render overwrote the first one's bytes on disk while
+    // both rows kept pointing at the one filename, so a published image and its score
+    // silently belonged to different pictures.
+    const stamp = new Date().toISOString().slice(11, 19).replace(/:/g, '')
+      + '-' + sessionId.slice(0, 4);
     let out;
     try {
       out = await generateImage(sessionId, prompt, {
@@ -168,7 +173,7 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
 
     const score = Math.max(0, Math.min(100, Number(verdict.score) || 0));
     // The score goes onto the picture, so the site shows what yam thought of it.
-    try { await scoreCreation(out.publicUrl, score); }
+    try { await scoreCreation(out.creationId, score); }
     catch (e) { log(`score not written: ${String(e.message).slice(0, 90)}`); }
 
     history.push({ at: new Date().toISOString(), prompt, score, critique: String(verdict.critique ?? '').slice(0, 300), url: out.publicUrl });

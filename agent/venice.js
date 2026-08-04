@@ -84,15 +84,17 @@ export async function veniceBalance() {
 // url and was invisible on the site. A session now gets its own id, and a refused insert
 // raises instead of vanishing: an image nobody can find is not a published image.
 async function recordCreation({ cycleId, prompt, selfScore, rel }) {
-  const { error } = await supabase.from('creations').insert({
+  const { data, error } = await supabase.from('creations').insert({
     cycle_id: cycleId ?? randomUUID(),
     media_type: 'image',
     prompt,
     self_score: selfScore,
     storage_path: `https://yam.garden/${rel}`,
     posted: false,
-  });
+  }).select('id').single();
   if (error) throw new Error(`image generated but not recorded — it will not appear on the site: ${error.message}`);
+  // The id is returned so a score written later lands on THIS picture and no other.
+  return data.id;
 }
 
 // A 402 is not a transient failure to be retried through — it is the account saying it will
@@ -147,8 +149,8 @@ export async function generateImage(cycleId, prompt, {
   writeFileSync(target, buf);
 
   await recordSpend(cycleId, 'venice', price, `study: ${prompt.slice(0, 80)}`);
-  await recordCreation({ cycleId, prompt, selfScore, rel });
-  return { rel, publicUrl: `https://yam.garden/${rel}`, seed: body.seed ?? null, mediaType };
+  const creationId = await recordCreation({ cycleId, prompt, selfScore, rel });
+  return { rel, creationId, publicUrl: `https://yam.garden/${rel}`, seed: body.seed ?? null, mediaType };
 }
 
 // Pose and angle variations that keep the SAME face. A fixed seed reproduces an image
@@ -194,6 +196,6 @@ export async function editImage(cycleId, imageUrl, prompt, { selfScore = null, l
   writeFileSync(target, buf);
 
   await recordSpend(cycleId, 'venice', IMAGE_EST_COST, `variation: ${prompt.slice(0, 80)}`);
-  await recordCreation({ cycleId, prompt, selfScore, rel });
-  return { rel, publicUrl: `https://yam.garden/${rel}`, from: imageUrl, mediaType };
+  const creationId = await recordCreation({ cycleId, prompt, selfScore, rel });
+  return { rel, creationId, publicUrl: `https://yam.garden/${rel}`, from: imageUrl, mediaType };
 }

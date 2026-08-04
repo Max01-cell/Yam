@@ -196,10 +196,14 @@ export async function cognitionBudgetRemaining() {
 // before it had been judged and nothing ever came back to fill the score in, so every
 // generated study on the site read 'unscored' — and a body of work yam cannot see its own
 // scores on is a body of work it cannot improve against.
-export async function scoreCreation(storagePath, selfScore) {
+// Scored by ROW ID, never by url. Matching on storage_path updates every row that shares
+// the path, and when two runs collided on one filename a score written for one picture
+// silently overwrote the score of the other. An id addresses exactly one creation.
+export async function scoreCreation(creationId, selfScore) {
+  if (!creationId) throw new Error('scoreCreation needs the creations row id');
   const { error } = await supabase.from('creations')
-    .update({ self_score: selfScore }).eq('storage_path', storagePath);
-  if (error) throw new Error(`score write failed for ${storagePath}: ${error.message}`);
+    .update({ self_score: selfScore }).eq('id', creationId);
+  if (error) throw new Error(`score write failed for creation ${creationId}: ${error.message}`);
 }
 
 export async function saveNote(topic, subject, content) {
