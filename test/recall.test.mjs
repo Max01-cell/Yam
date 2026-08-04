@@ -125,6 +125,7 @@ process.env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:54321';
 process.env.AGENT_HOME = new URL('..', import.meta.url).pathname.replace(/\/$/, '');
 
 const recall = await import('../agent/recall.js');
+const consolidate = await import('../agent/consolidate.js');
 const memory = await import('../agent/memory.js');
 
 // ================= PURE: against the REAL published corpus =================
@@ -212,6 +213,37 @@ t('collapses whitespace and caps length', () =>
   assert.strictEqual(memory.sanitizeTerm('  a\n\n  b  ').length, 3));
 t('empty stays empty', () => assert.strictEqual(memory.sanitizeTerm(null), ''));
 
+console.log('\nconsolidation pure logic:');
+t('holds until the batch is worth a call', () => {
+  assert.strictEqual(consolidate.shouldConsolidate(new Array(17), 18), false);
+  assert.strictEqual(consolidate.shouldConsolidate(new Array(18), 18), true);
+});
+t('parses a bare array', () =>
+  assert.strictEqual(consolidate.parseNotes('[{"topic":"a","content":"b"}]').length, 1));
+t('parses a fenced {notes:[...]} envelope', () =>
+  assert.strictEqual(consolidate.parseNotes('```json\n{"notes":[{"topic":"a","content":"b"}]}\n```').length, 1));
+t('empty array is a valid verdict, not an error', () =>
+  assert.deepStrictEqual(consolidate.parseNotes('[]'), []));
+t('drops malformed notes instead of saving junk', () =>
+  assert.strictEqual(consolidate.parseNotes('[{"topic":"","content":"x"},{"topic":"ok","content":"y"},{"topic":"z"}]').length, 1));
+t('unparseable output throws', () =>
+  assert.throws(() => consolidate.parseNotes('sorry, here are your notes:'), /unparseable/));
+t('caps notes at 4', () => {
+  const many = JSON.stringify(new Array(9).fill({ topic: 't', content: 'c' }));
+  assert.strictEqual(consolidate.parseNotes(many).length, 4);
+});
+t('prompt tells yam the material is about to be lost and permits keeping nothing', () => {
+  const p = consolidate.buildPrompt({
+    identity: { name: 'yam', seed: 'a mangaka in training' },
+    rows: [{ kind: 'observation', content: 'HN at 1659 points' }],
+    existingTopics: ['gutter'],
+  });
+  assert.ok(p.includes('never see them in raw form again'));
+  assert.ok(p.includes('[] is a valid'));
+  assert.ok(p.includes('already files notes under these topics: gutter'));
+  assert.ok(p.includes('HN at 1659 points'));
+});
+
 // ================= END-TO-END against mock PostgREST + Anthropic =================
 function seedDB({ thoughtCount, cursor }) {
   DB.thoughts = []; DB.study_notes = []; DB.spend_ledger = [];
@@ -227,6 +259,73 @@ function seedDB({ thoughtCount, cursor }) {
   }
 }
 const stateOf = k => DB.memory_state.find(r => r.key === k)?.value;
+
+console.log('\nend-to-end consolidation (real supabase-js queries, mock PostgREST):');
+
+await ta('runs, writes notes, advances cursor to the batch max', async () => {
+  seedDB({ thoughtCount: 100, cursor: null });
+  anthropicMode = 'ok';
+  const r = await consolidate.runConsolidation({ identity: { name: 'yam', seed: 's' }, cycleId: null });
+  assert.strictEqual(r.ran, true, `expected a run, got ${JSON.stringify(r)}`);
+  // window floor = oldest of the newest 40 = id 61, so ids 1..60 are consolidatable
+  assert.strictEqual(r.consolidated, 60, `expected 60 aged thoughts, got ${r.consolidated}`);
+  assert.strictEqual(r.cursor, 60);
+  assert.strictEqual(stateOf('consolidation').last_thought_id, 60);
+  assert.strictEqual(DB.study_notes.length, 2, 'the malformed third note should have been dropped');
+});
+
+await ta('NEVER consolidates a thought still inside the working window', async () => {
+  const consolidatedIds = anthropicBody.messages[0].content.match(/thought (\d+)/g).map(s => Number(s.split(' ')[1]));
+  assert.strictEqual(Math.max(...consolidatedIds), 60, 'a live thought leaked into the batch');
+  assert.ok(!anthropicBody.messages[0].content.includes('thought 61'), 'thought 61 is still in the window');
+});
+
+await ta('spend is ledgered against the real token usage', async () => {
+  const row = DB.spend_ledger.at(-1);
+  assert.strictEqual(row.service, 'anthropic-consolidate');
+  assert.strictEqual(row.amount_usd, Number(((5000 / 1e6) * 3 + (400 / 1e6) * 15).toFixed(4)));
+  assert.ok(row.detail.includes('60 thoughts'));
+});
+
+await ta('second run holds — nothing new has aged out', async () => {
+  const r = await consolidate.runConsolidation({ identity: { name: 'yam', seed: 's' } });
+  assert.strictEqual(r.ran, false);
+  assert.ok(/need 18/.test(r.reason), `unexpected reason: ${r.reason}`);
+  assert.strictEqual(stateOf('consolidation').last_thought_id, 60, 'cursor moved on a no-op');
+});
+
+await ta('API failure does NOT advance the cursor and is recorded', async () => {
+  seedDB({ thoughtCount: 100, cursor: 0 });
+  anthropicMode = 'fail';
+  const r = await consolidate.runConsolidation({ identity: { name: 'yam', seed: 's' } });
+  assert.strictEqual(r.ran, false);
+  assert.ok(r.error, 'expected an error to be reported');
+  assert.strictEqual(stateOf('consolidation').last_thought_id ?? 0, 0, 'cursor advanced past an unconsolidated batch');
+  assert.ok(stateOf('consolidation').last_error, 'failure not recorded for yam to see');
+  assert.strictEqual(DB.study_notes.length, 0);
+});
+
+await ta('the recorded failure surfaces in the next cycle archive block', async () => {
+  const line = recall.formatConsolidationStatus(stateOf('consolidation'));
+  assert.ok(line.includes('LAST RUN FAILED'), `got: ${line}`);
+});
+
+await ta('unparseable model output is a failure, not a silent skip', async () => {
+  seedDB({ thoughtCount: 100, cursor: 0 });
+  anthropicMode = 'garbage';
+  const r = await consolidate.runConsolidation({ identity: { name: 'yam', seed: 's' } });
+  assert.strictEqual(r.ran, false);
+  assert.ok(/unparseable/.test(r.error), `got: ${r.error}`);
+  assert.strictEqual(stateOf('consolidation').last_thought_id ?? 0, 0);
+});
+
+await ta('a fresh mind with nothing aged out is a clean no-op', async () => {
+  seedDB({ thoughtCount: 12, cursor: null });
+  anthropicMode = 'ok';
+  const r = await consolidate.runConsolidation({ identity: { name: 'yam', seed: 's' } });
+  assert.strictEqual(r.ran, false);
+  assert.strictEqual(DB.study_notes.length, 0);
+});
 
 console.log('\nend-to-end recall (real supabase-js queries):');
 

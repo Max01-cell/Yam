@@ -11,6 +11,7 @@ import {
 import { crawlCycle } from './crawl.js';
 import { think } from './think.js';
 import { buildArchive, buildRecalled } from './recall.js';
+import { runConsolidation } from './consolidate.js';
 
 // Rough Sonnet pricing for the ledger; adjust if you change AGENT_MODEL.
 const IN_PER_MTOK = 3.0, OUT_PER_MTOK = 15.0;
@@ -28,6 +29,11 @@ async function runCycle() {
 
   const crawled = await crawlCycle(revisit, diet?.value?.feeds);
   console.log(`[cycle ${cycleId}] crawled ${crawled.length} sources`);
+
+  // Compact what has aged out BEFORE reading the notebook back, so anything
+  // distilled this pass is already in the notebook yam sees below.
+  const consolidation = await runConsolidation({ identity, cycleId });
+  console.log(`[cycle ${cycleId}] consolidation: ${JSON.stringify(consolidation)}`);
 
   const thoughts = await recentThoughts(WORKING_WINDOW);
   const actionHistory = (await recentActions(5))
