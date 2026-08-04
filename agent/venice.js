@@ -19,31 +19,47 @@ function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
 }
 
-export async function generateImage(cycleId, prompt, { width = 1024, height = 1024, selfScore = null } = {}) {
+// Venice's native endpoint rather than the OpenAI-compat one, because seed, style_preset
+// and negative_prompt only exist here — and seed is the whole basis of a character that
+// stays itself. Verified: identical (model, prompt, seed) returns a byte-identical image,
+// so a reference sheet is reproducible rather than a lucky roll that can never be rerun.
+function pickB64(j) {
+  return j?.images?.[0] ?? j?.data?.[0]?.b64_json ?? null;
+}
+
+export async function generateImage(cycleId, prompt, {
+  width = 1024, height = 1024, selfScore = null,
+  seed = null, stylePreset = null, negativePrompt = null, label = null,
+} = {}) {
   if ((await budgetRemaining()) < IMAGE_EST_COST) {
     throw new Error(`budget exhausted for image generation`);
   }
-  const res = await fetch(`${VENICE_BASE}/images/generations`, {
+  const body = {
+    model: IMAGE_MODEL,
+    prompt,
+    width, height,
+    steps: 25,
+    format: 'png',
+  };
+  if (Number.isFinite(Number(seed))) body.seed = Number(seed);
+  if (stylePreset) body.style_preset = stylePreset;
+  if (negativePrompt) body.negative_prompt = negativePrompt;
+
+  const res = await fetch(`${VENICE_BASE}/image/generate`, {
     method: 'POST',
     headers: {
       'authorization': `Bearer ${process.env.VENICE_API_KEY}`,
       'content-type': 'application/json',
     },
-    body: JSON.stringify({
-      model: IMAGE_MODEL,
-      prompt,
-      size: `${width}x${height}`,
-      n: 1,
-      response_format: 'b64_json',
-    }),
+    body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`venice image gen failed: ${res.status} ${await res.text()}`);
   const data = await res.json();
-  const b64 = data?.data?.[0]?.b64_json;
-  if (!b64) throw new Error(`venice returned no b64_json: ${JSON.stringify(data).slice(0, 200)}`);
+  const b64 = pickB64(data);
+  if (!b64) throw new Error(`venice returned no image: ${JSON.stringify(data).slice(0, 200)}`);
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const rel = `studies/${stamp}-${slugify(prompt)}.png`;
+  const rel = `studies/${stamp}-${slugify(label || prompt)}.png`;
   const target = `${process.env.AGENT_HOME}/workspace/site/${rel}`;
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, Buffer.from(b64, 'base64'));
@@ -53,5 +69,44 @@ export async function generateImage(cycleId, prompt, { width = 1024, height = 10
     cycle_id: cycleId, media_type: 'image', prompt, self_score: selfScore,
     storage_path: `https://yam.garden/${rel}`, posted: false,
   });
-  return { rel, publicUrl: `https://yam.garden/${rel}` };
+  return { rel, publicUrl: `https://yam.garden/${rel}`, seed: body.seed ?? null };
+}
+
+// Pose and angle variations that keep the SAME face. A fixed seed reproduces an image
+// exactly, but it does not hold identity across a CHANGED prompt — same seed with a new
+// pose description gives a related composition, not the same character. Editing from the
+// canonical sheet does hold it, because the character is in the pixels being edited.
+export async function editImage(cycleId, imageUrl, prompt, { selfScore = null, label = null } = {}) {
+  if ((await budgetRemaining()) < IMAGE_EST_COST) {
+    throw new Error(`budget exhausted for image editing`);
+  }
+  const src = await fetch(imageUrl);
+  if (!src.ok) throw new Error(`could not fetch the reference image ${imageUrl} (HTTP ${src.status})`);
+  const b64in = Buffer.from(await src.arrayBuffer()).toString('base64');
+
+  const res = await fetch(`${VENICE_BASE}/image/edit`, {
+    method: 'POST',
+    headers: {
+      'authorization': `Bearer ${process.env.VENICE_API_KEY}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ prompt, image: b64in }),
+  });
+  if (!res.ok) throw new Error(`venice image edit failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  const data = await res.json();
+  const b64 = pickB64(data);
+  if (!b64) throw new Error(`venice edit returned no image: ${JSON.stringify(data).slice(0, 200)}`);
+
+  const stamp = new Date().toISOString().slice(0, 10);
+  const rel = `studies/${stamp}-${slugify(label || prompt)}.png`;
+  const target = `${process.env.AGENT_HOME}/workspace/site/${rel}`;
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, Buffer.from(b64, 'base64'));
+
+  await recordSpend(cycleId, 'venice', IMAGE_EST_COST, `variation: ${prompt.slice(0, 80)}`);
+  await supabase.from('creations').insert({
+    cycle_id: cycleId, media_type: 'image', prompt, self_score: selfScore,
+    storage_path: `https://yam.garden/${rel}`, posted: false,
+  });
+  return { rel, publicUrl: `https://yam.garden/${rel}`, from: imageUrl };
 }

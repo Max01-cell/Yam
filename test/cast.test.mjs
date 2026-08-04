@@ -8,7 +8,7 @@ process.env.SUPABASE_SERVICE_KEY ||= 'x';
 process.env.ANTHROPIC_API_KEY ||= 'x';
 
 const {
-  mergeCast, recordStudy, formatCast, emptyCast, normaliseName, nameKey,
+  mergeCast, recordStudy, formatCast, emptyCast, normaliseName, nameKey, seedFor, recordReference,
 } = await import('../agent/cast.js');
 
 let pass = 0, fail = 0;
@@ -144,6 +144,54 @@ t('nothing here throws on junk input', () => {
   assert.doesNotThrow(() => formatCast(null));
   assert.doesNotThrow(() => mergeCast(null, { characters: { X: { canon: 'y' } } }));
   assert.doesNotThrow(() => recordStudy(null, 'X', null));
+  assert.doesNotThrow(() => recordReference(null, 'X', 'u'));
+});
+
+console.log('\nreference sheets and seeds:');
+
+t('a seed is derived from the name — stable, in range, distinct per character', () => {
+  assert.strictEqual(seedFor('THRESHOLD'), seedFor('  threshold '), 'seed drifted with case/spacing');
+  const a = seedFor('THRESHOLD');
+  assert.ok(Number.isInteger(a) && a > 0 && a < 2e9, `bad seed ${a}`);
+  assert.notStrictEqual(seedFor('THRESHOLD'), seedFor('Wren'));
+});
+
+t('a new character is given its seed immediately, with no sheet yet', () => {
+  const s = mergeCast(emptyCast(), { characters: { Wren: { canon: 'small' } } });
+  assert.strictEqual(s.characters.Wren.seed, seedFor('Wren'));
+  assert.strictEqual(s.characters.Wren.reference, null);
+});
+
+t('yam cannot write its own seed or reference url', () => {
+  const s = mergeCast(emptyCast(), { characters: { Wren: { canon: 'c', seed: 7, reference: 'https://fake/x.png' } } });
+  assert.strictEqual(s.characters.Wren.seed, seedFor('Wren'));
+  assert.strictEqual(s.characters.Wren.reference, null);
+});
+
+t('appearance is stored separately from canon', () => {
+  const s = mergeCast(emptyCast(), { characters: { Wren: { canon: 'who they are', appearance: 'short, round, ink brush' } } });
+  assert.strictEqual(s.characters.Wren.appearance, 'short, round, ink brush');
+  assert.strictEqual(s.characters.Wren.canon, 'who they are');
+});
+
+t('a recorded reference survives later canon edits, and so does the seed', () => {
+  const s = recordReference(mergeCast(emptyCast(), { characters: { Wren: { canon: 'c' } } }), 'wren', 'https://yam.garden/studies/wren.png');
+  assert.strictEqual(s.characters.Wren.reference, 'https://yam.garden/studies/wren.png');
+  const after = mergeCast(s, { characters: { Wren: { canon: 'changed' } } });
+  assert.strictEqual(after.characters.Wren.reference, 'https://yam.garden/studies/wren.png');
+  assert.strictEqual(after.characters.Wren.seed, s.characters.Wren.seed, 'seed changed under a canon edit');
+});
+
+t('a blank url records nothing', () => {
+  assert.deepStrictEqual(recordReference(emptyCast(), 'New', '').characters, {});
+});
+
+t('the block says when a sheet is missing, and shows it when present', () => {
+  const none = formatCast(mergeCast(emptyCast(), { characters: { Wren: { canon: 'c' } } }));
+  assert.ok(/NONE YET/.test(none) && /venice_generate/.test(none), none);
+  const has = formatCast(recordReference(emptyCast(), 'Wren', 'https://yam.garden/studies/wren.png'));
+  assert.ok(has.includes('reference sheet: https://yam.garden/studies/wren.png'), has);
+  assert.ok(/draw toward it/.test(has));
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);

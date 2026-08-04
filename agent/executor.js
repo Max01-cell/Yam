@@ -33,8 +33,50 @@ const HANDLERS = {
   },
 
   async venice_generate(action) {
-    const { prompt } = action.payload;
-    const result = await generateImage(action.cycle_id, prompt);
+    const { prompt, character, style_preset: stylePreset, variation_of: variationOf } = action.payload;
+    const { getState, setState } = await import('./memory.js');
+    const { normaliseName, recordReference, seedFor } = await import('./cast.js');
+
+    // A character generation is not a free-text prompt. The canonical appearance text and
+    // the character's fixed seed are prepended by the system, so identity does not depend
+    // on yam remembering to redescribe them the same way every time — which is exactly the
+    // thing a language model cannot be relied on to do.
+    const who = normaliseName(character);
+    let castState = null, entry = null, seed = null, fullPrompt = prompt;
+    if (who) {
+      castState = (await getState('cast').catch(() => null))?.value ?? null;
+      const key = Object.keys(castState?.characters ?? {}).find(k => k.toLowerCase() === who.toLowerCase());
+      entry = key ? castState.characters[key] : null;
+      seed = entry?.seed ?? seedFor(who);
+      if (entry?.appearance) fullPrompt = `${entry.appearance}. ${prompt}`;
+    }
+
+    // Variations edit the canonical sheet instead of regenerating, because a seed holds an
+    // image, not a likeness: change the prompt and the same seed gives a different person.
+    if (variationOf || (who && entry?.reference && /\b(pose|angle|turnaround|expression|variation)\b/i.test(String(prompt)))) {
+      const { editImage } = await import('./venice.js');
+      const base = variationOf || entry.reference;
+      const out = await editImage(action.cycle_id, base, fullPrompt,
+        { selfScore: action.self_score ?? null, label: who ? `${who}-${prompt}` : null });
+      try {
+        execSync(`cd ${process.env.AGENT_HOME} && git add -A && git commit -q -m "study: ${String(prompt).slice(0, 60).replace(/"/g, '')}" && git push -q origin main`, { stdio: 'pipe' });
+        await triggerDeploy(`variation: ${String(prompt).slice(0, 40)}`);
+      } catch (e) { console.warn('variation commit/push skipped:', e.message); }
+      return { ...out, character: who || null, editedFrom: base };
+    }
+
+    const result = await generateImage(action.cycle_id, fullPrompt,
+      { seed, stylePreset: stylePreset ?? (who ? 'Anime' : null), label: who ? `${who}-${prompt}` : null });
+
+    // First sheet for this character becomes the canonical reference it draws toward.
+    if (who) {
+      try {
+        const fresh = (await getState('cast').catch(() => null))?.value ?? castState;
+        await setState('cast', recordReference(fresh, who, result.publicUrl));
+        console.log(`[cast] reference sheet for ${who}: ${result.publicUrl} (seed ${seed})`);
+      } catch (e) { console.warn(`cast reference not recorded for ${who}: ${e.message}`); }
+      result.character = who;
+    }
     try {
       execSync(`cd ${process.env.AGENT_HOME} && git add -A && git commit -q -m "study: ${(action.payload.prompt || '').slice(0, 60).replace(/"/g, '')}" && git push -q origin main`, { stdio: 'pipe' });
     } catch (e) { console.warn('study commit/push skipped:', e.message); }
