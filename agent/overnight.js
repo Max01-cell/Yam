@@ -9,6 +9,7 @@
 
 import { imageBudgetRemaining, getState } from './memory.js';
 import { runDesignSession } from './design-session.js';
+import { veniceBalance } from './venice.js';
 
 const FLOOR = Number(process.env.OVERNIGHT_FLOOR || 0);
 const ROUND_COST = Number(process.env.OVERNIGHT_ROUND_COST || 0.70);
@@ -29,6 +30,19 @@ async function nextCharacter() {
   return pool[0][0];
 }
 
+// Ask Venice what it will actually honour before spending an hour finding out. The
+// internal budget is what yam intends to spend; this is the account that has to pay.
+try {
+  const bal = await veniceBalance();
+  console.log(`[overnight] venice: USD ${bal.usd}, DIEM ${bal.diem}, permitted ${bal.permitted}${bal.nextEpoch ? `, next epoch ${bal.nextEpoch}` : ''}`);
+  if (!bal.permitted) {
+    console.log('[overnight] venice will refuse every request until the next epoch — not starting a session');
+    process.exit(0);
+  }
+} catch (e) {
+  console.log(`[overnight] venice balance unreadable (${String(e.message).slice(0, 100)}) — continuing anyway`);
+}
+
 let round = 0;
 while (true) {
   const left = await imageBudgetRemaining();
@@ -43,6 +57,7 @@ while (true) {
   try {
     const r = await runDesignSession({ character, explore: 6, variations: 6, tag: `r${round}-${new Date().toISOString().slice(11, 16).replace(":", "")}` });
     console.log(`[overnight] round ${round}: ${JSON.stringify(r)}`);
+    if (r.outOfFunds) { console.log('[overnight] venice account is out of funds; stopping'); break; }
     if (!r.ran) { console.log('[overnight] round produced nothing; stopping rather than burning the cap'); break; }
   } catch (e) {
     console.log(`[overnight] round ${round} threw: ${String(e.message).slice(0, 200)}`);

@@ -57,6 +57,34 @@ async function readImageResponse(res) {
   return Buffer.from(b64, 'base64');
 }
 
+// The REAL balance, which the internal ledger does not know about. Our budget tracks what
+// yam intends to spend; this is what Venice will actually honour, and they are different
+// numbers — a session once ran with $3.56 of internal budget against an account that was
+// already at -$0.09 and answered every request with a 402. accessPermitted is the flag that
+// matters; nextEpochBegins is when the daily Diem allowance comes back.
+export async function veniceBalance() {
+  const res = await fetch(`${VENICE_BASE}/api_keys/rate_limits`, {
+    headers: { authorization: `Bearer ${process.env.VENICE_API_KEY}` },
+  });
+  if (!res.ok) throw new Error(`venice balance check failed: ${res.status}`);
+  const d = (await res.json())?.data ?? {};
+  return {
+    permitted: d.accessPermitted !== false,
+    usd: Number(d.balances?.USD ?? 0),
+    diem: Number(d.balances?.DIEM ?? 0),
+    nextEpoch: d.nextEpochBegins ?? null,
+  };
+}
+
+// A 402 is not a transient failure to be retried through — it is the account saying it will
+// refuse everything until the next epoch. Marked so callers can stop the whole session
+// instead of walking the rest of the list into six identical errors.
+function paymentRequired(message) {
+  const e = new Error(message);
+  e.veniceOutOfFunds = true;
+  return e;
+}
+
 export async function generateImage(cycleId, prompt, {
   width = 1024, height = 1024, selfScore = null,
   seed = null, stylePreset = null, negativePrompt = null, label = null, model = null,
@@ -85,7 +113,11 @@ export async function generateImage(cycleId, prompt, {
     },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`venice image gen failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 300);
+    if (res.status === 402) throw paymentRequired(`venice account out of funds: ${detail}`);
+    throw new Error(`venice image gen failed: ${res.status} ${detail}`);
+  }
   const buf = await readImageResponse(res);
   const { ext, mediaType } = sniffImage(buf);
 
@@ -131,7 +163,11 @@ export async function editImage(cycleId, imageUrl, prompt, { selfScore = null, l
     },
     body: JSON.stringify({ prompt, image: b64in }),
   });
-  if (!res.ok) throw new Error(`venice image edit failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+  if (!res.ok) {
+    const detail = (await res.text()).slice(0, 300);
+    if (res.status === 402) throw paymentRequired(`venice account out of funds: ${detail}`);
+    throw new Error(`venice image edit failed: ${res.status} ${detail}`);
+  }
   const buf = await readImageResponse(res);
   const { ext, mediaType } = sniffImage(buf);
 

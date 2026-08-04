@@ -157,6 +157,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
 
   // ---- explore -------------------------------------------------------------
   const candidates = [];
+  let outOfFunds = false;
   for (let i = 0; i < explore; i++) {
     if ((await imageBudgetRemaining()) < FLOOR + IMAGE_COST) { log('budget floor reached during exploration'); break; }
     const axis = AXES[i % AXES.length];
@@ -167,9 +168,17 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
       });
       candidates.push({ axis, url: out.publicUrl, rel: out.rel, ...localImage(out.rel) });
       log(`explored ${i + 1}/${explore}: ${axis.slice(0, 44)}`);
-    } catch (e) { log(`explore ${i + 1} failed: ${String(e.message).slice(0, 120)}`); }
+    } catch (e) {
+      log(`explore ${i + 1} failed: ${String(e.message).slice(0, 120)}`);
+      // The account is refusing everything until the next epoch. Continuing walks the rest
+      // of the axes into the identical error and reports "no candidates were generated",
+      // which reads as a design failure rather than an empty wallet.
+      if (e.veniceOutOfFunds) { outOfFunds = true; break; }
+    }
   }
-  if (!candidates.length) return { ran: false, reason: 'no candidates were generated' };
+  if (!candidates.length) {
+    return { ran: false, reason: outOfFunds ? 'venice account out of funds' : 'no candidates were generated', outOfFunds };
+  }
 
   // ---- judge ---------------------------------------------------------------
   let verdict = null;
@@ -232,7 +241,10 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
           seed: entry.seed, width: 1024, height: 1024, cost: IMAGE_COST, label: `${character}-${stamp}-pose-${i + 1}` });
       made.push({ pose: POSES[i], url: out.publicUrl });
       log(`variation ${i + 1}: ${POSES[i].slice(0, 50)}`);
-    } catch (e) { log(`variation ${i + 1} failed: ${String(e.message).slice(0, 120)}`); }
+    } catch (e) {
+      log(`variation ${i + 1} failed: ${String(e.message).slice(0, 120)}`);
+      if (e.veniceOutOfFunds) { outOfFunds = true; log('venice account out of funds — keeping the sheet already made'); break; }
+    }
   }
 
   // Publish once, at the end. Committing per image would put twenty commits in a public
@@ -252,5 +264,5 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
       + `${made.length} pose and outfit variations produced from the canonical sheet.`);
   } catch { /* a note failure must not fail the session */ }
 
-  return { ran: true, explored: candidates.length, winner: win.url, variations: made.length, remaining: await imageBudgetRemaining() };
+  return { ran: true, explored: candidates.length, winner: win.url, variations: made.length, outOfFunds, remaining: await imageBudgetRemaining() };
 }
