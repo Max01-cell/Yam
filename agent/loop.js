@@ -6,10 +6,11 @@ import { execSync } from 'child_process';
 import {
   getState, setState, recordThought, recentThoughts,
   logCrawl, proposeAction, recordSpend, recentCreations, recentActions,
-  recentNotes, saveNote
+  recentNotes, saveNote, WORKING_WINDOW
 } from './memory.js';
 import { crawlCycle } from './crawl.js';
 import { think } from './think.js';
+import { buildArchive, buildRecalled } from './recall.js';
 
 // Rough Sonnet pricing for the ledger; adjust if you change AGENT_MODEL.
 const IN_PER_MTOK = 3.0, OUT_PER_MTOK = 15.0;
@@ -22,12 +23,13 @@ async function runCycle() {
   const tasteRules = (await getState('taste_rules')).value;
   const project = await getState('current_project').catch(() => ({ value: null }));
   const revisit = project.value?.revisit_urls ?? [];
+  const recallTopics = project.value?.recall_topics ?? [];
   const diet = await getState('diet').catch(() => null);
 
   const crawled = await crawlCycle(revisit, diet?.value?.feeds);
   console.log(`[cycle ${cycleId}] crawled ${crawled.length} sources`);
 
-  const thoughts = await recentThoughts(40);
+  const thoughts = await recentThoughts(WORKING_WINDOW);
   const actionHistory = (await recentActions(5))
     .map(a => `#${a.id} ${a.action_type}${a.path ? ` ${a.path}` : ''} -> ${a.status}${a.error ? ` (${a.error})` : ''}`)
     .join('\n');
@@ -35,7 +37,11 @@ async function runCycle() {
     .map(n => `[${n.topic}${n.subject ? `/${n.subject}` : ''}] ${n.content}`)
     .join('\n');
   const myWork = await recentCreations(8).catch(() => []);
-  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook });
+  const consolidationState = (await getState('consolidation').catch(() => null))?.value ?? null;
+  const archive = await buildArchive({ consolidationState });
+  const recalled = await buildRecalled(recallTopics);
+  if (recallTopics.length) console.log(`[cycle ${cycleId}] recalled: ${recallTopics.join(', ')} (${recalled.length} chars)`);
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), myWork, actionHistory, studyNotebook, archive, recalled });
 
   // Ledger the thinking cost
   const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK
@@ -71,6 +77,9 @@ async function runCycle() {
   await setState('current_project', {
     ...(mu.current_project ?? project.value ?? {}),
     revisit_urls: parsed.revisit_urls ?? [],
+    recall_topics: Array.isArray(parsed.recall_topics)
+      ? parsed.recall_topics.filter(t => typeof t === 'string' && t.trim()).slice(0, 3)
+      : [],
   });
 
   // Queue proposals — NOTHING executes from here. The gate decides.

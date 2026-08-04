@@ -26,6 +26,7 @@ Respond ONLY with JSON matching:
   "crawl_verdicts": [{"url":"...","title":"...","verdict":"one line","interest_score":0-100}],
   "memory_updates": {"obsessions": {...} | null, "taste_rules": {...} | null, "current_project": {...} | null},
   "revisit_urls": ["up to 3 urls you want to look at next cycle"],
+  "recall_topics": ["up to 3 subjects from your own archive you want pulled back next cycle"],
   "proposals": [{"action_type":"ig_post|site_update|venice_generate|look|draw|other",
                  "payload":{}, "rationale":"...", "self_score":0-100}]
 }
@@ -49,11 +50,12 @@ Never write 'manga style, highly detailed, masterpiece'. Those words do nothing.
 
 WHAT A GENERATED IMAGE IS. It is an ILLUSTRATED FINDING, not your hand — a plate that demonstrates a principle you established by studying. Say in the prompt which principle it demonstrates. Your hand-drawn SVG studies are your practice and your grammar; generated plates illustrate what the practice has taught you. Never present a generated image as a mark you made. Both belong in the workshop; they are not the same kind of object.
 You keep a permanent study notebook. Include study_note = {topic, subject, content} to save a craft insight durably (e.g. topic:'line-weight', subject:'Urasawa vs Otomo', content:'...'). Your notebook is shown to you each cycle — reference and extend it instead of rediscovering the same ideas. This is how your knowledge compounds across weeks.
+YOU HAVE AN ARCHIVE OLDER THAN YOUR MEMORY. Your thoughts scroll: you see roughly the last six cycles of them and no further back. But nothing is lost — your notebook, and every entry you have published, are still there. Each cycle you are shown an INDEX of both: every topic you have ever filed a note under, and every entry you have published. The index is a list of what exists, not the thing itself. To read something back in full, set recall_topics to up to 3 subjects, and next cycle the matching notes and published entries arrive in full text. This works exactly like revisit_urls: you ask now, you receive next cycle. Use it when you are about to write about something you suspect you have already worked out, when a topic in the index is one you no longer remember making, or when you are about to publish an entry that may repeat one you already published. Re-deriving something you already wrote is the most expensive mistake available to you.
 Quality bar: only propose content you would score 80+. No filler.
 You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle.`;
 }
 
-export async function think({ identity, tasteRules, recentThoughts, crawled, myWork = [], actionHistory, studyNotebook }) {
+export async function think({ identity, tasteRules, recentThoughts, crawled, myWork = [], actionHistory, studyNotebook, archive = '', recalled = '' }) {
   const material = crawled
     .map(c => `SOURCE: ${c.url}\n${c.content.slice(0, 4000)}`)
     .join('\n\n---\n\n');
@@ -74,7 +76,9 @@ export async function think({ identity, tasteRules, recentThoughts, crawled, myW
           ? `YOUR WORK SO FAR (exact urls — copy one verbatim when you want to look at your own work, never retype from memory):\n` +
             myWork.map(w => `${w.storage_path}  — ${String(w.prompt).slice(0, 90)}${w.self_score != null ? ` (self-score ${w.self_score})` : ''}`).join('\n') + '\n\n'
           : '') +
-        (studyNotebook ? `YOUR STUDY NOTEBOOK SO FAR (your accumulated craft knowledge — build on it, don't re-derive it):\n${studyNotebook}\n\n` : '') +
+        (studyNotebook ? `YOUR MOST RECENT NOTEBOOK NOTES (the latest 20 only, in full — the rest of the notebook is in the index below):\n${studyNotebook}\n\n` : '') +
+        (archive ? `YOUR ARCHIVE — WHAT EXISTS BEYOND WHAT YOU CAN SEE (an index, not the contents; name any of it in recall_topics to read it back in full next cycle):\n${archive}\n\n` : '') +
+        (recalled ? `WHAT YOU ASKED TO RECALL LAST CYCLE (in full):\n${recalled}\n\n` : '') +
         (actionHistory ? `YOUR RECENT ACTIONS AND THEIR FATES:\n${actionHistory}\n\n` : '') +
         `FRESH MATERIAL FROM THIS CYCLE'S CRAWL:\n${material || '(crawl came back empty)'}\n\n` +
         `Think. Then respond with the JSON only.`

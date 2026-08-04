@@ -6,6 +6,11 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+// How many thoughts think() can see. ONE definition, imported by everyone:
+// if the cycle and the consolidator disagreed about this number, consolidation
+// would either eat thoughts still in working memory or never catch up.
+export const WORKING_WINDOW = Number(process.env.THOUGHT_WINDOW || 40);
+
 export async function getState(key) {
   const { data, error } = await supabase
     .from('memory_state').select('value, revision').eq('key', key).single();
@@ -112,10 +117,60 @@ export async function saveNote(topic, subject, content) {
   return data.id;
 }
 
-export async function searchNotes(topic, limit = 15) {
-  const { data } = await supabase.from('study_notes')
+// PostgREST `or=` filters are comma- and paren-delimited, so a search term
+// containing those characters silently truncates the filter into something
+// that matches the wrong thing. Strip the delimiters and the ilike wildcards
+// rather than escaping them — these terms are short subjects, not queries.
+export function sanitizeTerm(s) {
+  return String(s ?? '')
+    .replace(/[,()%*\\"']/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+}
+
+// yam names a subject and gets back everything it has written about it.
+// Searches the body too: it files notes under topics it picks in the moment,
+// so the word it remembers is often in the content, not the topic.
+export async function searchNotes(term, limit = 5) {
+  const q = sanitizeTerm(term);
+  if (!q) return [];
+  const { data, error } = await supabase.from('study_notes')
     .select('created_at, topic, subject, content')
-    .ilike('topic', `%${topic}%`).order('created_at', { ascending: false }).limit(limit);
+    .or(`topic.ilike.%${q}%,subject.ilike.%${q}%,content.ilike.%${q}%`)
+    .order('created_at', { ascending: false }).limit(limit);
+  if (error) throw new Error(`note search failed for "${q}": ${error.message}`);
+  return data ?? [];
+}
+
+// Every topic in the notebook, not just the recent slice. This is what keeps
+// the notebook navigable once it outgrows the 20 rows shown in full.
+export async function notebookTopics(limit = 500) {
+  const { data, error } = await supabase.from('study_notes')
+    .select('topic, subject, created_at')
+    .order('created_at', { ascending: false }).limit(limit);
+  if (error) throw new Error(`notebook index read failed: ${error.message}`);
+  return data ?? [];
+}
+
+// The oldest thought id still inside the working window. Anything below this
+// has fallen out of what think() can see, and is the ONLY material safe to
+// consolidate — compacting a thought yam can still read would be premature.
+export async function workingWindowFloorId(windowSize = WORKING_WINDOW) {
+  const { data, error } = await supabase.from('thoughts')
+    .select('id').order('created_at', { ascending: false }).limit(windowSize);
+  if (error) throw new Error(`window floor read failed: ${error.message}`);
+  const ids = (data ?? []).map(r => Number(r.id)).filter(Number.isFinite);
+  return ids.length ? Math.min(...ids) : null;
+}
+
+// Aged-out thoughts in insertion order, exclusive on both ends.
+export async function thoughtsBetween(afterId, beforeId, limit = 80) {
+  const { data, error } = await supabase.from('thoughts')
+    .select('id, created_at, kind, content')
+    .gt('id', afterId).lt('id', beforeId)
+    .order('id', { ascending: true }).limit(limit);
+  if (error) throw new Error(`aged thoughts read failed: ${error.message}`);
   return data ?? [];
 }
 
