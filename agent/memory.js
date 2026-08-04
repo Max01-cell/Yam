@@ -109,19 +109,37 @@ export async function markAction(id, status, result = null) {
   await supabase.from('action_queue').update(patch).eq('id', id);
 }
 
+export function utcDay(d = new Date()) {
+  return d.toISOString().slice(0, 10);
+}
+
+// spent_today was never reset by anything — no cron, no timer, no code path — so it was
+// the running total since the ledger began and "daily cap" was in fact a lifetime cap.
+// Left alone it silently and permanently disables the two things that check it, image
+// generation and memory consolidation, while cognition keeps spending because think()
+// does not check at all. The roll happens on read as well as on write: a budget that
+// only reset when money was spent would stay exhausted precisely when it is exhausted.
+function rolled(v) {
+  const today = utcDay();
+  if (v?.day !== today) return { ...v, day: today, spent_today: 0, last_day_spend: Number(v?.spent_today ?? 0) };
+  return v;
+}
+
 export async function recordSpend(cycleId, service, amountUsd, detail = '') {
   await supabase.from('spend_ledger').insert({
     cycle_id: cycleId, service, amount_usd: amountUsd, detail
   });
   const budget = await getState('budget');
-  const v = budget.value;
+  const v = rolled(budget.value);
   v.spent_today = Number((Number(v.spent_today || 0) + amountUsd).toFixed(4));
   await setState('budget', v);
 }
 
 export async function budgetRemaining() {
   const { value } = await getState('budget');
-  return Number(value.daily_cap_usd) - Number(value.spent_today || 0);
+  const v = rolled(value);
+  if (v !== value) await setState('budget', v).catch(() => {});
+  return Number(v.daily_cap_usd) - Number(v.spent_today || 0);
 }
 
 export async function saveNote(topic, subject, content) {
