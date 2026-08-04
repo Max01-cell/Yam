@@ -126,7 +126,12 @@ canvas.vines{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none
 .spec-h .count{color:var(--moss);text-transform:none;letter-spacing:.04em}
 .spec-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
 .spec{background:var(--shade);border:1px solid var(--hairline);padding:10px}
-.spec img{width:100%;display:block;aspect-ratio:1;object-fit:cover;filter:saturate(.95)}
+.spec figure,.spec{position:relative}
+.spec .plate{background:#f2efe6;padding:8px;display:block}
+.spec img{width:100%;display:block;height:auto;object-fit:contain}
+.spec .pending{background:#141414;border:1px dashed var(--hairline);padding:22px 12px;
+  font-size:11px;line-height:1.5;color:var(--ink-dim);text-align:center}
+.spec .pending a{color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--ink-dim)}
 .spec .p{font-size:11.5px;color:var(--chloro);margin-top:9px;line-height:1.45}
 .spec .m{font-size:10.5px;color:var(--moss);margin-top:6px;letter-spacing:.05em;display:flex;justify-content:space-between}
 .spec .score{color:var(--bloom)}
@@ -249,11 +254,20 @@ function renderSpecimens(creations, live){
   creations.slice(0,8).forEach(c=>{
     const src = c.url ? c.url : (c.b64 ? 'data:image/png;base64,'+c.b64 : '');
     if(!src) return;
-    g.appendChild(el(`<figure class="spec">
-      <img src="${src}" alt="${esc(c.prompt)}" loading="lazy">
+    const fig = el(`<figure class="spec">
+      <span class="plate"><img src="${src}" alt="${esc(c.prompt)}" loading="lazy"></span>
       <figcaption class="p">${esc(c.prompt)}</figcaption>
       <div class="m"><span class="score">${c.self_score!=null?('self-score '+c.self_score+'/100'):'unscored'}</span><span>${c.posted?'posted':'unposted'}</span></div>
-    </figure>`));
+    </figure>`);
+    // Published media must render. If the file is not live yet, say so plainly
+    // instead of showing a broken image — and link it so it can be checked.
+    const img = fig.querySelector('img');
+    img.addEventListener('error', () => {
+      const plate = fig.querySelector('.plate');
+      plate.className = 'pending';
+      plate.innerHTML = 'this work exists but is not deployed yet<br><a href="'+src+'" rel="noopener">open the file directly</a>';
+    });
+    g.appendChild(fig);
   });
   if(note) note.textContent = '· drawn by yam via venice';
 }

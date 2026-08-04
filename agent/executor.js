@@ -7,6 +7,7 @@ import { approvedUnexecuted, autonomousPending, markAction } from './memory.js';
 import { generateImage } from './venice.js';
 import { runSequence } from './video.js';
 import { draw } from './draw.js';
+import { triggerDeploy } from './deploy.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { execSync } from 'child_process';
@@ -27,6 +28,7 @@ const HANDLERS = {
     mkdirSync(dirname(target), { recursive: true });
     writeFileSync(target, content);
     execSync(`cd ${process.env.AGENT_HOME} && git add -A && git commit -q -m "site: ${path}" && git push -q origin main`, { stdio: 'pipe' });
+    await triggerDeploy(`site: ${path}`);
     return { wrote: path };
   },
 

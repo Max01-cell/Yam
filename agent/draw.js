@@ -8,6 +8,7 @@ import { writeFileSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
 import { execSync } from 'child_process';
 import { createClient } from '@supabase/supabase-js';
+import { triggerDeploy } from './deploy.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY);
 
@@ -65,6 +66,7 @@ export async function draw(cycleId, { title, svg, intent = '', selfScore = null 
       { stdio: 'pipe', timeout: 60000 }
     );
     published = true;
+    await triggerDeploy(`study: ${String(title).slice(0, 40)}`);
   } catch (e) {
     console.warn('study commit/push failed — drawing is on disk but not live:', String(e.message).slice(0, 200));
   }
