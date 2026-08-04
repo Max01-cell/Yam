@@ -151,8 +151,11 @@ console.log('\nreference sheets and seeds:');
 
 t('a seed is derived from the name — stable, in range, distinct per character', () => {
   assert.strictEqual(seedFor('THRESHOLD'), seedFor('  threshold '), 'seed drifted with case/spacing');
-  const a = seedFor('THRESHOLD');
-  assert.ok(Number.isInteger(a) && a > 0 && a < 2e9, `bad seed ${a}`);
+  // Venice rejects anything above 999999999 — a live 400, not a theoretical bound.
+  for (const n of ['THRESHOLD', 'Wren', 'The Surveyor', 'zzz', 'a b c', '漢字']) {
+    const s = seedFor(n);
+    assert.ok(Number.isInteger(s) && s >= 0 && s <= 999999999, `seed out of Venice's range for ${n}: ${s}`);
+  }
   assert.notStrictEqual(seedFor('THRESHOLD'), seedFor('Wren'));
 });
 

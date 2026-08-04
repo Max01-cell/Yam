@@ -47,7 +47,9 @@ export function seedFor(name) {
   const s = nameKey(name);
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
-  return Math.abs(h | 0) % 2000000000;
+  // Venice rejects a seed above 999999999, so the range is bounded to what the renderer
+  // will actually accept rather than to what fits in an int.
+  return Math.abs(h | 0) % 1000000000;
 }
 
 function clampText(s, max) {
