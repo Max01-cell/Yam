@@ -13,7 +13,13 @@ const VENICE_BASE = process.env.VENICE_BASE || 'https://api.venice.ai/api/v1';
 // which suits ink line work and screentone better than the photoreal flux line.
 // Alternatives worth trying via env: flux-2-pro, flux-2-max, z-image-turbo.
 const IMAGE_MODEL = process.env.VENICE_IMAGE_MODEL || 'wai-Illustrious';
-const IMAGE_EST_COST = Number(process.env.VENICE_IMAGE_COST || 0.02);
+// Was 0.02, which matched nothing Venice actually charges: the model list prices
+// recraft-v4 at 0.05 and nano-banana-pro at 0.18, so every session under-reported its own
+// spend to the budget guarding it. Callers that know their model pass the real figure.
+const IMAGE_EST_COST = Number(process.env.VENICE_IMAGE_COST || 0.05);
+// Venice allows up to 50 on every current image model and defaults to 20. 25 was leaving
+// detail on the table on every render for no saving — steps are not separately billed.
+const STEPS = Number(process.env.VENICE_STEPS || 50);
 
 function slugify(s) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
@@ -54,15 +60,17 @@ async function readImageResponse(res) {
 export async function generateImage(cycleId, prompt, {
   width = 1024, height = 1024, selfScore = null,
   seed = null, stylePreset = null, negativePrompt = null, label = null, model = null,
+  cost = null,
 } = {}) {
-  if ((await imageBudgetRemaining()) < IMAGE_EST_COST) {
+  const price = Number.isFinite(Number(cost)) ? Number(cost) : IMAGE_EST_COST;
+  if ((await imageBudgetRemaining()) < price) {
     throw new Error(`budget exhausted for image generation`);
   }
   const body = {
     model: model || IMAGE_MODEL,
     prompt,
     width, height,
-    steps: 25,
+    steps: STEPS,
     format: 'png',
   };
   if (Number.isFinite(Number(seed))) body.seed = Number(seed);
@@ -87,7 +95,7 @@ export async function generateImage(cycleId, prompt, {
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, buf);
 
-  await recordSpend(cycleId, 'venice', IMAGE_EST_COST, `study: ${prompt.slice(0, 80)}`);
+  await recordSpend(cycleId, 'venice', price, `study: ${prompt.slice(0, 80)}`);
   await supabase.from('creations').insert({
     cycle_id: cycleId, media_type: 'image', prompt, self_score: selfScore,
     storage_path: `https://yam.garden/${rel}`, posted: false,

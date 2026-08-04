@@ -6,12 +6,13 @@
 // brief from what the judging found, and only then commit to a canonical sheet and produce
 // the pose and outfit variations.
 //
-// Model choice is empirical, not a preference. wai-Illustrious — the model the project used
-// until now — is an anime checkpoint that renders franchise tropes by default: asked for a
-// black-ink model sheet of an original figure it returned a colour image containing a figure
-// in an orange gi. recraft-v4 with the Line Art preset returns black ink on white and a body
-// nobody else has drawn. For a project whose whole claim is originality that difference is
-// the difference between usable and disqualifying.
+// Model choice is empirical, not a preference, and it has now been wrong twice.
+// wai-Illustrious is an anime checkpoint that renders franchise tropes by default: asked
+// for a black-ink model sheet of an original figure it returned a figure in an orange gi.
+// recraft-v4 with the Line Art preset fixed the originality and lost everything else — it
+// returns a scratchy contour sketch, a stick figure with a good silhouette. Originality was
+// never the only bar. A design has to be FINISHED enough to draw from, and the preset made
+// that impossible no matter how the brief was written. See DESIGN_MODEL for what replaced it.
 //
 // Every step is budget-guarded and nothing throws: an overnight run that dies at 3am having
 // spent the cap and produced nothing would be the worst possible outcome.
@@ -25,9 +26,17 @@ import { mergeCast, recordReference, normaliseName } from './cast.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const JUDGE_MODEL = process.env.AGENT_MODEL || 'claude-sonnet-4-6';
-export const DESIGN_MODEL = process.env.VENICE_DESIGN_MODEL || 'recraft-v4';
-export const DESIGN_PRESET = process.env.VENICE_DESIGN_PRESET || 'Line Art';
-const IMAGE_COST = Number(process.env.VENICE_DESIGN_COST || 0.05);
+// Second bake-off, same brief across seven models at 50 steps. recraft-v4 with the Line
+// Art preset — the previous choice — returns a scratchy crude sketch: the preset IS the
+// crudeness, and no amount of prompt work gets past it. nano-banana-pro returned an actual
+// professional model sheet: two full views plus detail callouts for the head and the boots,
+// screentone, drawn costume construction. hunyuan-image-v3 (3-view turnaround) and
+// seedream-v5-pro (ink wash) were the runners-up and are the cheaper fallbacks.
+export const DESIGN_MODEL = process.env.VENICE_DESIGN_MODEL || 'nano-banana-pro';
+// No style preset. 'Line Art' was doing the damage — it renders a rough ink doodle whatever
+// the prompt asks for. The style now comes from the brief, where it can be argued with.
+export const DESIGN_PRESET = process.env.VENICE_DESIGN_PRESET || '';
+const IMAGE_COST = Number(process.env.VENICE_DESIGN_COST || 0.18);
 // Was 0.60, to leave room for the hourly cycles. Cognition now has its own ceiling and
 // cannot reach the image reserve, so holding money back from designing is money that
 // simply goes unspent — the floor stays configurable but defaults to nothing held back.
@@ -36,7 +45,13 @@ const FLOOR = Number(process.env.DESIGN_BUDGET_FLOOR || 0);
 // Written for a renderer. Every clause is a decision the judge can check against.
 // Exported because the per-cycle venice_generate path needs exactly the same guard rails:
 // the same model asked for a character without these clauses returns the orange gi.
-export const NEGATIVE = 'colour, color, coloured, painted, grayscale photo, background scenery, gradient, '
+//
+// The first half of this list is new and is the half that matters. The old negative
+// defended only against genericness and colour, and said nothing at all against CRUDENESS —
+// so a scratchy unfinished doodle satisfied every clause in it and got published.
+export const NEGATIVE = 'crude sketch, scribble, rough doodle, unfinished, stick figure, childlike drawing, '
+  + 'messy scratchy linework, amateur, low detail, sloppy proportions, '
+  + 'colour, color, coloured, painted, photo, 3d render, background scenery, gradient, '
   + 'spiky anime hair, martial arts uniform, orange gi, superhero costume, armour, cape, bodybuilder, '
   + 'existing anime character, recognisable franchise character, logo, emblem, watermark, signature, text, '
   + 'multiple unrelated characters, cute chibi, generic handsome man, t-shirt and jeans';
@@ -58,13 +73,18 @@ const AXES = [
   'age: old, compressed, the asymmetry now permanent in the spine',
 ];
 
+// The brief asks for a FINISHED character design, not for ink line art. The old one asked
+// for "ink line art, black ink only" and got exactly that: a bare contour drawing. Naming
+// the level of finish — rendered form, costume construction, considered anatomy — is what
+// separates a design somebody could work from and a sketch of one.
 function briefFor(base, axis) {
-  return `ink line art character model sheet on plain white paper, black ink only. `
-    + `ONE original figure drawn twice: full-body front view and full-body three-quarter view. `
-    + `${base} ${axis}. `
-    + `heavy committed black contour along the spine and the load-bearing side, terminating without tapering. `
-    + `fine hatching inside the torso. solid black shapes in the deepest negative spaces. `
-    + `a dashed horizontal ground line at the feet. no background, no colour, no text.`;
+  return `Full-body character design sheet of ONE original character, front view and three-quarter view, `
+    + `plain white background. ${base} ${axis} `
+    + `Finished professional manga and comic character design, publication quality: confident varied-weight `
+    + `linework, deep solid spot blacks, controlled screentone, ink wash describing form and volume. `
+    + `Detailed costume construction — visible seams, fabric weight and drape, wear at the hems and cuffs. `
+    + `Strong readable silhouette, considered anatomy, expressive posture. `
+    + `No text, no lettering, no watermark, no colour.`;
 }
 
 // The silhouette brief comes from the CHARACTER, not from a constant. This was
@@ -94,9 +114,12 @@ export async function judge({ canon, candidates }) {
     text: `You are yam, judging your own character designs for ONE character you will draw for months.\n\n`
       + `THE CANON YOU WROTE:\n${canon}\n\n`
       + `Below are ${candidates.length} candidate sheets, numbered. Judge them against the canon and against `
-      + `one standard above all: is this a person nobody else has drawn? Reject anything that reads as a `
-      + `generic anime figure, a stock handsome face, an anatomy mannequin, or anything resembling an `
-      + `existing franchise character — those are failures however well drawn.\n\n`
+      + `two standards. FIRST, originality: is this a person nobody else has drawn? Reject anything that `
+      + `reads as a generic anime figure, a stock handsome face, an anatomy mannequin, or anything `
+      + `resembling an existing franchise character — those are failures however well drawn. SECOND, `
+      + `finish: is this a design somebody could actually draw a comic from? Reject a crude sketch, a bare `
+      + `contour with no rendering, or anything that leaves the costume construction and the anatomy `
+      + `unresolved — an original silhouette that is only a scribble is also a failure.\n\n`
       + `For each: score 0-100 and one sentence naming the single thing that is right or wrong with it.\n`
       + `Then choose ONE winner and write a sharpened appearance paragraph for it: a fixed physical `
       + `description for a renderer, incorporating what the winning image actually did well.\n\n`
@@ -137,7 +160,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
     try {
       const out = await generateImage(null, briefFor(base, axis), {
         model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: DESIGN_PRESET,
-        width: 1024, height: 1024, label: `${character}-${stamp}-explore-${i + 1}`,
+        width: 1024, height: 1024, cost: IMAGE_COST, label: `${character}-${stamp}-explore-${i + 1}`,
       });
       candidates.push({ axis, url: out.publicUrl, rel: out.rel, ...localImage(out.rel) });
       log(`explored ${i + 1}/${explore}: ${axis.slice(0, 44)}`);
@@ -197,10 +220,13 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
       // asked for a three-quarter turn it returned a skeleton. Holding the seed and the
       // appearance text constant and changing only the pose clause drifts far less.
       const out = await generateImage(null,
-        `ink line art, black ink on plain white paper, ONE figure only. ${appearance} ${POSES[i]}. `
-        + `heavy committed contour, fine hatching, solid blacks, dashed ground line, no colour, no text.`,
+        `ONE figure only, plain white background. ${appearance} ${POSES[i]}. `
+        + `Finished professional manga and comic illustration, publication quality: confident varied-weight `
+        + `linework, deep solid spot blacks, controlled screentone, ink wash describing form and volume. `
+        + `Costume construction with visible seams, fabric weight and drape. Considered anatomy, `
+        + `strong readable silhouette. No text, no lettering, no watermark, no colour.`,
         { model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: DESIGN_PRESET,
-          seed: entry.seed, width: 1024, height: 1024, label: `${character}-${stamp}-pose-${i + 1}` });
+          seed: entry.seed, width: 1024, height: 1024, cost: IMAGE_COST, label: `${character}-${stamp}-pose-${i + 1}` });
       made.push({ pose: POSES[i], url: out.publicUrl });
       log(`variation ${i + 1}: ${POSES[i].slice(0, 50)}`);
     } catch (e) { log(`variation ${i + 1} failed: ${String(e.message).slice(0, 120)}`); }
