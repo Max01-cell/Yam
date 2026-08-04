@@ -1,0 +1,57 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 700' width='400' height='700' style='background:white'>
+
+<!-- THRESHOLD — Study 012 -->
+<!-- Primary revision: fill='#000000' opacity='1'; scapular shelf terminus; feathered marks at full stroke weight -->
+
+<!-- DASHED THRESHOLD LINE at 53% from top = 371px, hip joint level -->
+<line x1='30' y1='371' x2='370' y2='371' stroke='#000000' stroke-width='2' stroke-dasharray='12,8' opacity='1'/>
+
+<!-- SPINE — committed mark, heavy, blunt termini, butt caps -->
+<line x1='200' y1='80' x2='200' y2='560' stroke='#000000' stroke-width='4' stroke-linecap='butt' opacity='1'/>
+
+<!-- HEAD — simple circle, committed weight -->
+<circle cx='200' cy='62' r='22' fill='none' stroke='#000000' stroke-width='3' opacity='1'/>
+
+<!-- HIGH LEFT SHOULDER MASS — closed filled polygon with flat horizontal inferior terminus (scapular shelf) -->
+<!-- Shoulder rises from spine at y=130, extends left and up, terminates with flat bottom edge -->
+<polygon points='200,130 170,100 130,95 110,105 108,125 120,145 160,150 200,148' fill='#000000' opacity='1'/>
+
+<!-- RIGHT SHOULDER — lower, simple committed stroke -->
+<line x1='200' y1='148' x2='250' y2='168' stroke='#000000' stroke-width='3' stroke-linecap='butt' opacity='1'/>
+
+<!-- LEFT ARM — descends from shoulder mass, downward vector, blunt terminus -->
+<line x1='120' y1='145' x2='95' y2='290' stroke='#000000' stroke-width='3' stroke-linecap='butt' opacity='1'/>
+
+<!-- RIGHT ARM — downward vector preserved from 011 -->
+<line x1='250' y1='168' x2='270' y2='310' stroke='#000000' stroke-width='3' stroke-linecap='butt' opacity='1'/>
+
+<!-- TORSO INTERIOR — feathered marks, SAME stroke-weight as spine (4), short radiating from spine -->
+<!-- Left side ribs -->
+<line x1='200' y1='165' x2='168' y2='180' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<line x1='200' y1='185' x2='163' y2='202' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<line x1='200' y1='205' x2='161' y2='224' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<line x1='200' y1='225' x2='162' y2='244' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<line x1='200' y1='245' x2='164' y2='262' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<!-- Right side ribs -->
+<line x1='200' y1='165' x2='228' y2='178' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<line x1='200' y1='185' x2='232' y2='200' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<line x1='200' y1='205' x2='234' y2='222' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<line x1='200' y1='225' x2='233' y2='242' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+<line x1='200' y1='245' x2='230' y2='260' stroke='#000000' stroke-width='2.5' stroke-linecap='butt' opacity='1'/>
+
+<!-- HIP / PELVIS FORK — threshold bisects here —>
+<!-- Left hip -->
+<line x1='200' y1='360' x2='170' y2='420' stroke='#000000' stroke-width='4' stroke-linecap='butt' opacity='1'/>
+<!-- Right hip -->
+<line x1='200' y1='360' x2='228' y2='420' stroke='#000000' stroke-width='4' stroke-linecap='butt' opacity='1'/>
+
+<!-- LEFT LEG -->
+<line x1='170' y1='420' x2='160' y2='560' stroke='#000000' stroke-width='3.5' stroke-linecap='butt' opacity='1'/>
+<!-- RIGHT LEG -->
+<line x1='228' y1='420' x2='236' y2='560' stroke='#000000' stroke-width='3.5' stroke-linecap='butt' opacity='1'/>
+
+<!-- FEET — blunt horizontal termini -->
+<line x1='148' y1='560' x2='172' y2='560' stroke='#000000' stroke-width='3' stroke-linecap='butt' opacity='1'/>
+<line x1='224' y1='560' x2='248' y2='560' stroke='#000000' stroke-width='3' stroke-linecap='butt' opacity='1'/>
+
+</svg>
