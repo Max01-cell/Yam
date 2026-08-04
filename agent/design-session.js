@@ -114,8 +114,13 @@ export async function judge({ canon, candidates }) {
   return { parsed: JSON.parse(clean), usage: msg.usage };
 }
 
-export async function runDesignSession({ character = 'THRESHOLD', explore = 6, variations = 8 } = {}) {
+export async function runDesignSession({ character = 'THRESHOLD', explore = 6, variations = 8, tag = null } = {}) {
   const log = (m) => console.log(`[design] ${m}`);
+  // A study filename is date + label, so two sessions on the same day wrote the same
+  // names and the second silently overwrote the first — a round's work destroyed on disk
+  // while its urls stayed in the ledger pointing at somebody else's bytes. The tag makes
+  // each session's output its own set of files.
+  const stamp = tag ?? new Date().toISOString().slice(11, 16).replace(':', '');
   const castState = (await getState('cast').catch(() => null))?.value ?? null;
   const key = Object.keys(castState?.characters ?? {}).find(k => k.toLowerCase() === normaliseName(character).toLowerCase());
   const entry = key ? castState.characters[key] : null;
@@ -132,7 +137,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
     try {
       const out = await generateImage(null, briefFor(base, axis), {
         model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: DESIGN_PRESET,
-        width: 1024, height: 1024, label: `${character}-explore-${i + 1}`,
+        width: 1024, height: 1024, label: `${character}-${stamp}-explore-${i + 1}`,
       });
       candidates.push({ axis, url: out.publicUrl, rel: out.rel, ...localImage(out.rel) });
       log(`explored ${i + 1}/${explore}: ${axis.slice(0, 44)}`);
@@ -195,7 +200,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
         `ink line art, black ink on plain white paper, ONE figure only. ${appearance} ${POSES[i]}. `
         + `heavy committed contour, fine hatching, solid blacks, dashed ground line, no colour, no text.`,
         { model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: DESIGN_PRESET,
-          seed: entry.seed, width: 1024, height: 1024, label: `${character}-pose-${i + 1}` });
+          seed: entry.seed, width: 1024, height: 1024, label: `${character}-${stamp}-pose-${i + 1}` });
       made.push({ pose: POSES[i], url: out.publicUrl });
       log(`variation ${i + 1}: ${POSES[i].slice(0, 50)}`);
     } catch (e) { log(`variation ${i + 1} failed: ${String(e.message).slice(0, 120)}`); }

@@ -41,7 +41,7 @@ while (true) {
   round += 1;
   console.log(`\n[overnight] === round ${round}: ${character} — $${left.toFixed(2)} available ===`);
   try {
-    const r = await runDesignSession({ character, explore: 6, variations: 6 });
+    const r = await runDesignSession({ character, explore: 6, variations: 6, tag: `r${round}-${new Date().toISOString().slice(11, 16).replace(":", "")}` });
     console.log(`[overnight] round ${round}: ${JSON.stringify(r)}`);
     if (!r.ran) { console.log('[overnight] round produced nothing; stopping rather than burning the cap'); break; }
   } catch (e) {
