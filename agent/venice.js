@@ -2,7 +2,7 @@
 // Verified against docs.venice.ai (images/generations OpenAI-compat, b64_json).
 // Studies save into the public site so the notebook publishes itself.
 
-import { writeFileSync, mkdirSync } from 'fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { dirname } from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { recordSpend, budgetRemaining } from './memory.js';
@@ -80,9 +80,17 @@ export async function editImage(cycleId, imageUrl, prompt, { selfScore = null, l
   if ((await budgetRemaining()) < IMAGE_EST_COST) {
     throw new Error(`budget exhausted for image editing`);
   }
-  const src = await fetch(imageUrl);
-  if (!src.ok) throw new Error(`could not fetch the reference image ${imageUrl} (HTTP ${src.status})`);
-  const b64in = Buffer.from(await src.arrayBuffer()).toString('base64');
+  // Accepts a public url OR a site-relative path. A study generated this minute exists on
+  // disk but its url 404s until the next deploy, so a session that edits what it has just
+  // made must read the bytes locally.
+  let b64in;
+  if (/^https?:\/\//i.test(imageUrl)) {
+    const src = await fetch(imageUrl);
+    if (!src.ok) throw new Error(`could not fetch the reference image ${imageUrl} (HTTP ${src.status})`);
+    b64in = Buffer.from(await src.arrayBuffer()).toString('base64');
+  } else {
+    b64in = readFileSync(`${process.env.AGENT_HOME || '.'}/workspace/site/${imageUrl}`).toString('base64');
+  }
 
   const res = await fetch(`${VENICE_BASE}/image/edit`, {
     method: 'POST',

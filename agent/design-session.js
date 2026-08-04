@@ -16,6 +16,8 @@
 // Every step is budget-guarded and nothing throws: an overnight run that dies at 3am having
 // spent the cap and produced nothing would be the worst possible outcome.
 
+import { readFileSync } from 'fs';
+import { execSync } from 'child_process';
 import Anthropic from '@anthropic-ai/sdk';
 import { getState, setState, budgetRemaining, saveNote } from './memory.js';
 import { generateImage, editImage } from './venice.js';
@@ -59,10 +61,11 @@ function briefFor(base, axis) {
     + `a dashed horizontal ground line at the feet. no background, no colour, no text.`;
 }
 
-async function fetchB64(url) {
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`could not read back ${url}: HTTP ${r.status}`);
-  return Buffer.from(await r.arrayBuffer()).toString('base64');
+// Read the bytes off disk, not off yam.garden. A freshly generated study exists locally
+// but its public URL 404s until the next commit, push and deploy — judging over HTTP would
+// mean paying for images and then failing to look at them.
+function localB64(rel) {
+  return readFileSync(`${process.env.AGENT_HOME || '.'}/workspace/site/${rel}`).toString('base64');
 }
 
 // Judged in one call rather than one call per image, because the question is comparative:
@@ -113,7 +116,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
         model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: 'Line Art',
         width: 1024, height: 1024, label: `${character}-explore-${i + 1}`,
       });
-      candidates.push({ axis, url: out.publicUrl, b64: await fetchB64(out.publicUrl) });
+      candidates.push({ axis, url: out.publicUrl, rel: out.rel, b64: localB64(out.rel) });
       log(`explored ${i + 1}/${explore}: ${axis.slice(0, 44)}`);
     } catch (e) { log(`explore ${i + 1} failed: ${String(e.message).slice(0, 120)}`); }
   }
@@ -160,12 +163,23 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
   for (let i = 0; i < Math.min(variations, POSES.length); i++) {
     if ((await budgetRemaining()) < FLOOR + IMAGE_COST) { log('budget floor reached during variations'); break; }
     try {
-      const out = await editImage(null, win.url, `${appearance}. ${POSES[i]}. black ink line art only, no colour, plain white background.`,
+      const out = await editImage(null, win.rel, `${appearance}. ${POSES[i]}. black ink line art only, no colour, plain white background.`,
         { label: `${character}-pose-${i + 1}` });
       made.push({ pose: POSES[i], url: out.publicUrl });
       log(`variation ${i + 1}: ${POSES[i].slice(0, 50)}`);
     } catch (e) { log(`variation ${i + 1} failed: ${String(e.message).slice(0, 120)}`); }
   }
+
+  // Publish once, at the end. Committing per image would put twenty commits in a public
+  // history for one design session.
+  try {
+    execSync(`cd ${JSON.stringify(process.env.AGENT_HOME || '.')} && git add -A && `
+      + `git commit -q -m ${JSON.stringify(`design: ${character} session — ${candidates.length} explored, ${made.length} variations`)} && `
+      + `git push -q origin main`, { stdio: 'pipe', timeout: 120000 });
+    const { triggerDeploy } = await import('./deploy.js');
+    await triggerDeploy(`design session: ${character}`);
+    log('published');
+  } catch (e) { log(`publish failed: ${String(e.message).slice(0, 140)}`); }
 
   try {
     await saveNote('character-design', character,
