@@ -27,6 +27,30 @@ function pickB64(j) {
   return j?.images?.[0] ?? j?.data?.[0]?.b64_json ?? null;
 }
 
+// Venice honours `format` on some models and ignores it on others: recraft-v4 returns WebP
+// whatever you ask for. Saving those bytes as .png produces a file that browsers render but
+// that the vision API rejects outright — "specified image/png, but appears to be image/webp".
+// So the extension comes from the bytes, never from what we requested.
+export function sniffImage(buf) {
+  if (buf.length > 8 && buf[0] === 0x89 && buf[1] === 0x50) return { ext: 'png', mediaType: 'image/png' };
+  if (buf.length > 12 && buf.slice(0, 4).toString('ascii') === 'RIFF' && buf.slice(8, 12).toString('ascii') === 'WEBP') {
+    return { ext: 'webp', mediaType: 'image/webp' };
+  }
+  if (buf.length > 3 && buf[0] === 0xff && buf[1] === 0xd8) return { ext: 'jpg', mediaType: 'image/jpeg' };
+  return { ext: 'png', mediaType: 'image/png' };
+}
+
+// /image/edit answers with raw image bytes rather than JSON, so res.json() on it throws on
+// the PNG signature itself. Read whichever the response actually is.
+async function readImageResponse(res) {
+  const ctype = res.headers.get('content-type') || '';
+  if (ctype.startsWith('image/')) return Buffer.from(await res.arrayBuffer());
+  const j = await res.json();
+  const b64 = pickB64(j);
+  if (!b64) throw new Error(`venice returned no image: ${JSON.stringify(j).slice(0, 200)}`);
+  return Buffer.from(b64, 'base64');
+}
+
 export async function generateImage(cycleId, prompt, {
   width = 1024, height = 1024, selfScore = null,
   seed = null, stylePreset = null, negativePrompt = null, label = null, model = null,
@@ -54,22 +78,21 @@ export async function generateImage(cycleId, prompt, {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`venice image gen failed: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  const b64 = pickB64(data);
-  if (!b64) throw new Error(`venice returned no image: ${JSON.stringify(data).slice(0, 200)}`);
+  const buf = await readImageResponse(res);
+  const { ext, mediaType } = sniffImage(buf);
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const rel = `studies/${stamp}-${slugify(label || prompt)}.png`;
+  const rel = `studies/${stamp}-${slugify(label || prompt)}.${ext}`;
   const target = `${process.env.AGENT_HOME}/workspace/site/${rel}`;
   mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, Buffer.from(b64, 'base64'));
+  writeFileSync(target, buf);
 
   await recordSpend(cycleId, 'venice', IMAGE_EST_COST, `study: ${prompt.slice(0, 80)}`);
   await supabase.from('creations').insert({
     cycle_id: cycleId, media_type: 'image', prompt, self_score: selfScore,
     storage_path: `https://yam.garden/${rel}`, posted: false,
   });
-  return { rel, publicUrl: `https://yam.garden/${rel}`, seed: body.seed ?? null };
+  return { rel, publicUrl: `https://yam.garden/${rel}`, seed: body.seed ?? null, mediaType };
 }
 
 // Pose and angle variations that keep the SAME face. A fixed seed reproduces an image
@@ -101,20 +124,19 @@ export async function editImage(cycleId, imageUrl, prompt, { selfScore = null, l
     body: JSON.stringify({ prompt, image: b64in }),
   });
   if (!res.ok) throw new Error(`venice image edit failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
-  const data = await res.json();
-  const b64 = pickB64(data);
-  if (!b64) throw new Error(`venice edit returned no image: ${JSON.stringify(data).slice(0, 200)}`);
+  const buf = await readImageResponse(res);
+  const { ext, mediaType } = sniffImage(buf);
 
   const stamp = new Date().toISOString().slice(0, 10);
-  const rel = `studies/${stamp}-${slugify(label || prompt)}.png`;
+  const rel = `studies/${stamp}-${slugify(label || prompt)}.${ext}`;
   const target = `${process.env.AGENT_HOME}/workspace/site/${rel}`;
   mkdirSync(dirname(target), { recursive: true });
-  writeFileSync(target, Buffer.from(b64, 'base64'));
+  writeFileSync(target, buf);
 
   await recordSpend(cycleId, 'venice', IMAGE_EST_COST, `variation: ${prompt.slice(0, 80)}`);
   await supabase.from('creations').insert({
     cycle_id: cycleId, media_type: 'image', prompt, self_score: selfScore,
     storage_path: `https://yam.garden/${rel}`, posted: false,
   });
-  return { rel, publicUrl: `https://yam.garden/${rel}`, from: imageUrl };
+  return { rel, publicUrl: `https://yam.garden/${rel}`, from: imageUrl, mediaType };
 }

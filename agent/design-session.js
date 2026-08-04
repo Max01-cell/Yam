@@ -20,7 +20,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import Anthropic from '@anthropic-ai/sdk';
 import { getState, setState, budgetRemaining, saveNote } from './memory.js';
-import { generateImage, editImage } from './venice.js';
+import { generateImage, editImage, sniffImage } from './venice.js';
 import { mergeCast, recordReference, normaliseName } from './cast.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -64,8 +64,9 @@ function briefFor(base, axis) {
 // Read the bytes off disk, not off yam.garden. A freshly generated study exists locally
 // but its public URL 404s until the next commit, push and deploy — judging over HTTP would
 // mean paying for images and then failing to look at them.
-function localB64(rel) {
-  return readFileSync(`${process.env.AGENT_HOME || '.'}/workspace/site/${rel}`).toString('base64');
+function localImage(rel) {
+  const buf = readFileSync(`${process.env.AGENT_HOME || '.'}/workspace/site/${rel}`);
+  return { b64: buf.toString('base64'), mediaType: sniffImage(buf).mediaType };
 }
 
 // Judged in one call rather than one call per image, because the question is comparative:
@@ -86,7 +87,7 @@ export async function judge({ canon, candidates }) {
   }];
   for (const [i, c] of candidates.entries()) {
     content.push({ type: 'text', text: `Candidate ${i + 1} (${c.axis}):` });
-    content.push({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: c.b64 } });
+    content.push({ type: 'image', source: { type: 'base64', media_type: c.mediaType || 'image/png', data: c.b64 } });
   }
   const msg = await anthropic.messages.create({
     model: JUDGE_MODEL, max_tokens: 2000, messages: [{ role: 'user', content }],
@@ -116,7 +117,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
         model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: 'Line Art',
         width: 1024, height: 1024, label: `${character}-explore-${i + 1}`,
       });
-      candidates.push({ axis, url: out.publicUrl, rel: out.rel, b64: localB64(out.rel) });
+      candidates.push({ axis, url: out.publicUrl, rel: out.rel, ...localImage(out.rel) });
       log(`explored ${i + 1}/${explore}: ${axis.slice(0, 44)}`);
     } catch (e) { log(`explore ${i + 1} failed: ${String(e.message).slice(0, 120)}`); }
   }
