@@ -118,7 +118,7 @@ Type=oneshot
 User=agent
 WorkingDirectory=$AGENT_HOME
 EnvironmentFile=$AGENT_HOME/.env
-ExecStart=/usr/bin/node agent/overnight.js
+ExecStart=/usr/bin/node agent/design-run.js
 TimeoutStartSec=3600
 MemoryMax=1G
 CPUQuota=75%
@@ -126,9 +126,9 @@ EOF
 
 cat >/etc/systemd/system/agent-design.timer <<EOF
 [Unit]
-Description=design characters once a day, bounded by the image budget reserve
+Description=refine a character design every 3 hours, bounded by the daily venice credits
 [Timer]
-OnCalendar=*-*-* 03:30:00
+OnCalendar=*-*-* 00/3:30:00
 Persistent=true
 [Install]
 WantedBy=timers.target

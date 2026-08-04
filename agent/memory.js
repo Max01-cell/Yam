@@ -131,7 +131,12 @@ function rolled(v) {
 // cognition always won: think() never checked the budget at all while every generator did,
 // so by mid-morning the cap was spent on thinking and the day's images could not happen.
 // A reserved slice cannot be reached by anything that is not making a picture.
-const IMAGE_RESERVE = Number(process.env.IMAGE_RESERVE_USD || 2);
+// 500 Venice credits a day, where a credit is a US cent — Venice bills in USD and this is
+// the number the account is allowed to burn. Held as credits rather than dollars because
+// that is the unit the limit was set in, and a limit stated in one unit and enforced in
+// another is how a cap quietly becomes a different cap.
+export const CREDITS_PER_USD = 100;
+const IMAGE_RESERVE = Number(process.env.VENICE_DAILY_CREDITS || 500) / CREDITS_PER_USD;
 
 // Services whose spend comes out of the image pool rather than the cognition pool.
 const IMAGE_SERVICES = new Set(['venice']);
@@ -185,6 +190,16 @@ export async function cognitionBudgetRemaining() {
   const v = await budget();
   const spentThinking = Number(v.spent_today || 0) - Number(v.spent_image_today || 0);
   return Number(v.daily_cap_usd) - reserveOf(v) - spentThinking;
+}
+
+// The score a picture earned, written back onto the picture. Generated work was inserted
+// before it had been judged and nothing ever came back to fill the score in, so every
+// generated study on the site read 'unscored' — and a body of work yam cannot see its own
+// scores on is a body of work it cannot improve against.
+export async function scoreCreation(storagePath, selfScore) {
+  const { error } = await supabase.from('creations')
+    .update({ self_score: selfScore }).eq('storage_path', storagePath);
+  if (error) throw new Error(`score write failed for ${storagePath}: ${error.message}`);
 }
 
 export async function saveNote(topic, subject, content) {
