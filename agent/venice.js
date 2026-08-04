@@ -4,6 +4,7 @@
 
 import { writeFileSync, mkdirSync, readFileSync } from 'fs';
 import { dirname } from 'path';
+import { randomUUID } from 'crypto';
 import { createClient } from '@supabase/supabase-js';
 import { recordSpend, imageBudgetRemaining } from './memory.js';
 
@@ -76,6 +77,24 @@ export async function veniceBalance() {
   };
 }
 
+// The row that puts a generated image on the website. creations.cycle_id is NOT NULL and
+// this insert was written without an error check, so a design session — which had no cycle
+// to belong to and passed null — spent real credits on every image and silently recorded
+// none of them. The gallery reads this table, so the work existed on disk and on the public
+// url and was invisible on the site. A session now gets its own id, and a refused insert
+// raises instead of vanishing: an image nobody can find is not a published image.
+async function recordCreation({ cycleId, prompt, selfScore, rel }) {
+  const { error } = await supabase.from('creations').insert({
+    cycle_id: cycleId ?? randomUUID(),
+    media_type: 'image',
+    prompt,
+    self_score: selfScore,
+    storage_path: `https://yam.garden/${rel}`,
+    posted: false,
+  });
+  if (error) throw new Error(`image generated but not recorded — it will not appear on the site: ${error.message}`);
+}
+
 // A 402 is not a transient failure to be retried through — it is the account saying it will
 // refuse everything until the next epoch. Marked so callers can stop the whole session
 // instead of walking the rest of the list into six identical errors.
@@ -128,10 +147,7 @@ export async function generateImage(cycleId, prompt, {
   writeFileSync(target, buf);
 
   await recordSpend(cycleId, 'venice', price, `study: ${prompt.slice(0, 80)}`);
-  await supabase.from('creations').insert({
-    cycle_id: cycleId, media_type: 'image', prompt, self_score: selfScore,
-    storage_path: `https://yam.garden/${rel}`, posted: false,
-  });
+  await recordCreation({ cycleId, prompt, selfScore, rel });
   return { rel, publicUrl: `https://yam.garden/${rel}`, seed: body.seed ?? null, mediaType };
 }
 
@@ -178,9 +194,6 @@ export async function editImage(cycleId, imageUrl, prompt, { selfScore = null, l
   writeFileSync(target, buf);
 
   await recordSpend(cycleId, 'venice', IMAGE_EST_COST, `variation: ${prompt.slice(0, 80)}`);
-  await supabase.from('creations').insert({
-    cycle_id: cycleId, media_type: 'image', prompt, self_score: selfScore,
-    storage_path: `https://yam.garden/${rel}`, posted: false,
-  });
+  await recordCreation({ cycleId, prompt, selfScore, rel });
   return { rel, publicUrl: `https://yam.garden/${rel}`, from: imageUrl, mediaType };
 }

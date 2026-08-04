@@ -146,7 +146,10 @@ export async function draw(cycleId, { title, svg, intent = '', selfScore = null,
   const who = normaliseName(character);
   const label = who ? `[drawn by hand] ${who}: ${title}` : `[drawn by hand] ${title}`;
 
-  await supabase.from('creations').insert({
+  // Checked, because the identical unchecked insert in venice.js silently discarded 29
+  // generated images: they were paid for, published to yam.garden, and never appeared in
+  // the gallery because nothing ever looked at the error this returns.
+  const { error: creationError } = await supabase.from('creations').insert({
     cycle_id: cycleId,
     media_type: 'image',
     prompt: intent ? `${label} — ${intent}` : label,
@@ -154,6 +157,7 @@ export async function draw(cycleId, { title, svg, intent = '', selfScore = null,
     self_score: selfScore,
     posted: false,
   });
+  if (creationError) throw new Error(`drawing published but not recorded — it will not appear on the site: ${creationError.message}`);
 
   // Count the study against the cast HERE, at the moment the drawing exists — the same
   // reason the SVG is measured rather than described. A practice count yam could write

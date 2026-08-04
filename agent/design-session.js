@@ -18,6 +18,7 @@
 // spent the cap and produced nothing would be the worst possible outcome.
 
 import { readFileSync } from 'fs';
+import { randomUUID } from 'crypto';
 import { execSync } from 'child_process';
 import Anthropic from '@anthropic-ai/sdk';
 import { getState, setState, imageBudgetRemaining, recordSpend, saveNote } from './memory.js';
@@ -147,6 +148,9 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
   // while its urls stayed in the ledger pointing at somebody else's bytes. The tag makes
   // each session's output its own set of files.
   const stamp = tag ?? new Date().toISOString().slice(11, 16).replace(':', '');
+  // A session is a cycle for accounting purposes. It passed null and every creations row
+  // was rejected by a NOT NULL constraint, so the whole session's output stayed off the site.
+  const sessionId = randomUUID();
   const castState = (await getState('cast').catch(() => null))?.value ?? null;
   const key = Object.keys(castState?.characters ?? {}).find(k => k.toLowerCase() === normaliseName(character).toLowerCase());
   const entry = key ? castState.characters[key] : null;
@@ -162,7 +166,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
     if ((await imageBudgetRemaining()) < FLOOR + IMAGE_COST) { log('budget floor reached during exploration'); break; }
     const axis = AXES[i % AXES.length];
     try {
-      const out = await generateImage(null, briefFor(base, axis), {
+      const out = await generateImage(sessionId, briefFor(base, axis), {
         model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: DESIGN_PRESET,
         width: 1024, height: 1024, cost: IMAGE_COST, label: `${character}-${stamp}-explore-${i + 1}`,
       });
@@ -231,7 +235,7 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
       // /image/edit has no strength control and no selectable model, so it reinterprets:
       // asked for a three-quarter turn it returned a skeleton. Holding the seed and the
       // appearance text constant and changing only the pose clause drifts far less.
-      const out = await generateImage(null,
+      const out = await generateImage(sessionId,
         `ONE figure only, plain white background. ${appearance} ${POSES[i]}. `
         + `Finished professional manga and comic illustration, publication quality: confident varied-weight `
         + `linework, deep solid spot blacks, controlled screentone, ink wash describing form and volume. `
