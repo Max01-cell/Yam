@@ -19,7 +19,7 @@
 import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import Anthropic from '@anthropic-ai/sdk';
-import { getState, setState, imageBudgetRemaining, saveNote } from './memory.js';
+import { getState, setState, imageBudgetRemaining, recordSpend, saveNote } from './memory.js';
 import { generateImage, sniffImage } from './venice.js';
 import { mergeCast, recordReference, normaliseName } from './cast.js';
 
@@ -143,8 +143,14 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
   // ---- judge ---------------------------------------------------------------
   let verdict = null;
   try {
-    const { parsed } = await judge({ canon, candidates });
+    const { parsed, usage } = await judge({ canon, candidates });
     verdict = parsed;
+    // A dozen images fed to a vision model is the most expensive single call in the
+    // session and it was never written to the ledger, so the budget the whole thing is
+    // guarded by was quietly wrong by the cost of the one step that decides anything.
+    const cost = ((usage?.input_tokens ?? 0) / 1e6) * 3.0 + ((usage?.output_tokens ?? 0) / 1e6) * 15.0;
+    await recordSpend(null, 'anthropic-judge', Number(cost.toFixed(4)),
+      `judged ${candidates.length} designs for ${character}`).catch(() => {});
     log(`winner: candidate ${verdict.winner} — ${String(verdict.why ?? '').slice(0, 120)}`);
   } catch (e) {
     log(`judging failed (${String(e.message).slice(0, 100)}) — keeping the first candidate`);
