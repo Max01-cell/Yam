@@ -4,12 +4,21 @@
 
 import { extractImages } from './images.js';
 
+// The seed diet. Every entry was probed against extractImages under the same 60_000
+// char truncation fetchText applies, and every one yields images in production.
+//
+// The five reddit .json feeds that used to sit at the top of this list are gone: they
+// return HTTP 403 to datacenter IPs, so they had been contributing nothing but latency.
+// They were also off-mission — cinematography, vfx and glitch art are what yam read when
+// it was a growth organism studying what spreads, not a mangaka learning the page.
 export const DEFAULT_FEEDS = [
-  'https://www.reddit.com/r/cinematography/.json?limit=10',
-  'https://www.reddit.com/r/Simulated/.json?limit=10',
-  'https://www.reddit.com/r/generative/.json?limit=10',
-  'https://www.reddit.com/r/vfx/.json?limit=10',
-  'https://www.reddit.com/r/glitch_art/.json?limit=10',
+  'https://www.tcj.com/feed/',                    // The Comics Journal — criticism, interviews
+  'https://www.comicsbeat.com/feed/',             // comics news, heavy on art
+  'https://mangabrog.wordpress.com/feed/',        // translated mangaka interviews
+  'https://www.solrad.co/feed',                   // comics criticism
+  'https://publicdomainreview.org/rss.xml',       // historical illustration and print
+  'https://letterformarchive.org/feed/',          // lettering and type
+  'https://hyperallergic.com/feed/',              // art criticism
   'https://www.thisiscolossal.com/feed/',
   'https://vimeo.com/channels/staffpicks/videos/rss',
 ];
