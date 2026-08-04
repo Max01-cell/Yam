@@ -70,12 +70,13 @@ const HANDLERS = {
     // wai-Illustrious with the 'Anime' preset, which is the exact combination that returns
     // a generic anime lead in an orange gi — so every character yam generated from a cycle
     // came back as somebody else's character, however carefully it had written the brief.
-    const { DESIGN_MODEL, DESIGN_PRESET, NEGATIVE } = await import('./design-session.js');
+    const { DESIGN_MODEL, DESIGN_PRESET, NEGATIVE, IMAGE_COST } = await import('./design-session.js');
     const result = await generateImage(action.cycle_id, fullPrompt, {
       seed,
       model: who ? DESIGN_MODEL : null,
       stylePreset: stylePreset ?? (who ? DESIGN_PRESET : null),
       negativePrompt: who ? NEGATIVE : null,
+      cost: who ? IMAGE_COST : null,
       label: who ? `${who}-${prompt}` : null,
     });
 

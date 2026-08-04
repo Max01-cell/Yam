@@ -36,7 +36,10 @@ export const DESIGN_MODEL = process.env.VENICE_DESIGN_MODEL || 'nano-banana-pro'
 // No style preset. 'Line Art' was doing the damage — it renders a rough ink doodle whatever
 // the prompt asks for. The style now comes from the brief, where it can be argued with.
 export const DESIGN_PRESET = process.env.VENICE_DESIGN_PRESET || '';
-const IMAGE_COST = Number(process.env.VENICE_DESIGN_COST || 0.18);
+// Exported for the same reason the model is: the per-cycle path renders with this model
+// and would otherwise bill the budget at the generic default, under-reporting every
+// character generation yam makes from a cycle by the difference between the two.
+export const IMAGE_COST = Number(process.env.VENICE_DESIGN_COST || 0.18);
 // Was 0.60, to leave room for the hourly cycles. Cognition now has its own ceiling and
 // cannot reach the image reserve, so holding money back from designing is money that
 // simply goes unspent — the floor stays configurable but defaults to nothing held back.
