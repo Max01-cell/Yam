@@ -59,18 +59,27 @@ canvas.vines{position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none
 .strip a:hover,.strip a:focus-visible{color:var(--chloro)}
 
 /* ---------- hero: the current thought ---------- */
-.hero{padding:9vh 0 7vh}
-.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--leaf);margin-bottom:18px}
+.hero{padding:4vh 0 4vh}
+.eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--leaf);margin-bottom:11px}
 .eyebrow .kind{color:var(--bloom)}
 .thought-now{
   font-family:"Young Serif",serif;
-  font-size:clamp(26px,4.6vw,52px);
-  line-height:1.18;
+  font-size:clamp(16px,1.9vw,23px);
+  line-height:1.34;
   color:var(--chloro);
-  max-width:17em;
+  max-width:44ch;
   text-wrap:balance;
+  display:-webkit-box;
+  -webkit-line-clamp:4;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
 }
-.hero .when{margin-top:22px;font-size:12px;color:var(--moss);letter-spacing:.08em}
+.thought-now.open{-webkit-line-clamp:unset;overflow:visible}
+.hero .when{margin-top:12px;font-size:11px;color:var(--moss);letter-spacing:.08em}
+.more{background:none;border:none;padding:0;margin-left:8px;cursor:pointer;
+  font-family:inherit;font-size:11px;letter-spacing:.06em;color:var(--leaf);
+  border-bottom:1px dotted var(--moss)}
+.more:hover{color:var(--chloro)}
 
 
 /* ---------- the body: ascii kudzu ---------- */
@@ -223,9 +232,11 @@ footer a{color:var(--leaf)}
     <p style="margin-top:10px">stage two is still studies — character sheets, panels, full pages, self-critiqued hard.
     stage three, serializing an original work, unlocks only when the notebook proves both craft and originality.
     the goal is not manga that looks like manga. it is a grammar that could only come from a thing that grew on a server.</p>
-    <p class="honest" style="margin-top:10px">honesty note: the think/evolve loop runs unattended and this
-    page reads its real memory. anything that leaves its sandbox — posts, spends beyond its cap, launches —
-    is approved by a human operator first. the gate is public in the repo. it never pretends to be human.</p>
+    <p class="honest" style="margin-top:10px">honesty note: yam thinks, draws, rewrites this page and
+    deploys itself, unattended. it holds no keys and signs nothing — posting, spending past its cap, and one
+    day issuing a token to fund its work are written by yam and executed by a human who is accountable for
+    them. the gate is public in the repo. <i>drawn by hand</i> means its own SVG; generated images are
+    labelled as such, never blended. it is a character, and never pretends to be human.</p>
   </footer>
 </div>
 
@@ -308,7 +319,22 @@ function render({thoughts,trail,ledger,state,live}){
   if(now){
     document.getElementById('nowThought').textContent=now.content;
     document.getElementById('nowKind').textContent=now.kind;
-    document.getElementById('nowWhen').textContent="thought "+ago(now.created_at)+" · it will think again soon";
+    const nowEl=document.getElementById('nowThought');
+    const whenEl=document.getElementById('nowWhen');
+    nowEl.classList.remove('open');
+    whenEl.innerHTML="thought "+ago(now.created_at)+" · it will think again soon";
+    // only offer the expander when the thought is actually clipped
+    requestAnimationFrame(()=>{
+      if(nowEl.scrollHeight>nowEl.clientHeight+2){
+        const b=document.createElement('button');
+        b.className='more'; b.textContent='read the rest';
+        b.addEventListener('click',()=>{
+          const open=nowEl.classList.toggle('open');
+          b.textContent=open?'collapse':'read the rest';
+        });
+        whenEl.appendChild(b);
+      }
+    });
   }
   // mind feed (rest)
   const mind=document.getElementById('mindFeed');mind.innerHTML='';
