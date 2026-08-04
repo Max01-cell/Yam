@@ -20,7 +20,7 @@ import { readFileSync } from 'fs';
 import { execSync } from 'child_process';
 import Anthropic from '@anthropic-ai/sdk';
 import { getState, setState, budgetRemaining, saveNote } from './memory.js';
-import { generateImage, editImage, sniffImage } from './venice.js';
+import { generateImage, sniffImage } from './venice.js';
 import { mergeCast, recordReference, normaliseName } from './cast.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -164,8 +164,15 @@ export async function runDesignSession({ character = 'THRESHOLD', explore = 6, v
   for (let i = 0; i < Math.min(variations, POSES.length); i++) {
     if ((await budgetRemaining()) < FLOOR + IMAGE_COST) { log('budget floor reached during variations'); break; }
     try {
-      const out = await editImage(null, win.rel, `${appearance}. ${POSES[i]}. black ink line art only, no colour, plain white background.`,
-        { label: `${character}-pose-${i + 1}` });
+      // Generated with the character's permanent seed rather than edited from the sheet.
+      // /image/edit has no strength control and no selectable model, so it reinterprets:
+      // asked for a three-quarter turn it returned a skeleton. Holding the seed and the
+      // appearance text constant and changing only the pose clause drifts far less.
+      const out = await generateImage(null,
+        `ink line art, black ink on plain white paper, ONE figure only. ${appearance} ${POSES[i]}. `
+        + `heavy committed contour, fine hatching, solid blacks, dashed ground line, no colour, no text.`,
+        { model: DESIGN_MODEL, negativePrompt: NEGATIVE, stylePreset: 'Line Art',
+          seed: entry.seed, width: 1024, height: 1024, label: `${character}-pose-${i + 1}` });
       made.push({ pose: POSES[i], url: out.publicUrl });
       log(`variation ${i + 1}: ${POSES[i].slice(0, 50)}`);
     } catch (e) { log(`variation ${i + 1} failed: ${String(e.message).slice(0, 120)}`); }
