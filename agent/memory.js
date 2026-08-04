@@ -124,3 +124,10 @@ export async function recentNotes(limit = 20) {
     .select('topic, subject, content').order('created_at', { ascending: false }).limit(limit);
   return data ?? [];
 }
+
+export async function recentCreations(limit = 8) {
+  const { data } = await supabase.from('creations')
+    .select('created_at, prompt, storage_path, self_score')
+    .order('created_at', { ascending: false }).limit(limit);
+  return data ?? [];
+}

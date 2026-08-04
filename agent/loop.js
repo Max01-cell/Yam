@@ -5,7 +5,7 @@ import { randomUUID } from 'crypto';
 import { execSync } from 'child_process';
 import {
   getState, setState, recordThought, recentThoughts,
-  logCrawl, proposeAction, recordSpend, recentActions,
+  logCrawl, proposeAction, recordSpend, recentCreations, recentActions,
   recentNotes, saveNote
 } from './memory.js';
 import { crawlCycle } from './crawl.js';
@@ -34,7 +34,8 @@ async function runCycle() {
   const studyNotebook = (await recentNotes(20))
     .map(n => `[${n.topic}${n.subject ? `/${n.subject}` : ''}] ${n.content}`)
     .join('\n');
-  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled: crawled.slice(0, 9), actionHistory, studyNotebook });
+  const myWork = await recentCreations(8).catch(() => []);
+  const { parsed, usage } = await think({ identity, tasteRules, recentThoughts: thoughts, crawled, myWork: crawled.slice(0, 9), actionHistory, studyNotebook });
 
   // Ledger the thinking cost
   const cost = ((usage.input_tokens ?? 0) / 1e6) * IN_PER_MTOK

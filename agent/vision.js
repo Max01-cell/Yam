@@ -101,8 +101,12 @@ export async function look(cycleId, imageUrl, question, searchQuery) {
     }
   }
 
-  // 2nd recovery: the filename itself was invented — search for the subject
-  if (!imgRes.ok) {
+  // 2nd recovery: an invented WIKIMEDIA filename can be recovered by subject search.
+  // This must NEVER apply to other hosts. Substituting an unrelated image for a
+  // requested one is worse than failing: it produces confident analysis of the
+  // wrong artwork. Own-work URLs in particular must fail loudly.
+  const isWikimedia = /(?:wikimedia|wikipedia)\.org/i.test(imageUrl || '');
+  if (!imgRes.ok && isWikimedia) {
     const q = searchQuery || wordsFrom(imageUrl || '');
     if (q) {
       try {
@@ -111,14 +115,19 @@ export async function look(cycleId, imageUrl, question, searchQuery) {
           const third = await fetch(hits[0].url, { headers: UA });
           if (third.ok) {
             imgRes = third; target = hits[0].url;
-            substituted = `"${imageUrl}" does not exist on commons; searched "${q}" and studied ${hits[0].name} instead`;
+            substituted = `"${imageUrl}" does not exist on commons; searched "${q}" and studied ${hits[0].name} instead — verify this is what you meant before drawing conclusions`;
           }
         }
       } catch (e) { /* fall through to the error below */ }
     }
   }
 
-  if (!imgRes.ok) throw new Error(`could not resolve an image for ${imageUrl || searchQuery} (HTTP ${imgRes.status}). Do not recall wikimedia filenames — they are usually invented. Instead propose look with payload {search: "subject you want to see", question} and a real file will be found for you.`);
+  if (!imgRes.ok) {
+    const ownWork = /yam\.garden/i.test(imageUrl || '');
+    throw new Error(ownWork
+      ? `${imageUrl} does not exist. Do not guess the filenames of your own work — the exact urls of everything you have made are listed in YOUR WORK SO FAR each cycle. Copy one from there.`
+      : `could not resolve an image for ${imageUrl || searchQuery} (HTTP ${imgRes.status}). Do not recall filenames; they are usually invented. Propose look with payload {search: "subject you want to see", question} and a real file will be found for you.`);
+  }
 
   const ctype = imgRes.headers.get('content-type') || 'image/jpeg';
   if (!ctype.startsWith('image/')) throw new Error(`not an image (got ${ctype.split(';')[0]}) — this URL is a webpage, not a file; use a direct .jpg/.png, or a Wikimedia File: page (auto-converted)`);

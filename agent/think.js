@@ -53,7 +53,7 @@ Quality bar: only propose content you would score 80+. No filler.
 You control your own diet: include memory_updates.diet = {feeds:[up to 10 https URLs]} to change what you crawl next cycle.`;
 }
 
-export async function think({ identity, tasteRules, recentThoughts, crawled, actionHistory, studyNotebook }) {
+export async function think({ identity, tasteRules, recentThoughts, crawled, myWork = [], actionHistory, studyNotebook }) {
   const material = crawled
     .map(c => `SOURCE: ${c.url}\n${c.content.slice(0, 4000)}`)
     .join('\n\n---\n\n');
@@ -70,6 +70,10 @@ export async function think({ identity, tasteRules, recentThoughts, crawled, act
       role: 'user',
       content:
         `YOUR RECENT THOUGHTS (oldest first):\n${recent || '(first cycle — you were just born)'}\n\n` +
+        (myWork.length
+          ? `YOUR WORK SO FAR (exact urls — copy one verbatim when you want to look at your own work, never retype from memory):\n` +
+            myWork.map(w => `${w.storage_path}  — ${String(w.prompt).slice(0, 90)}${w.self_score != null ? ` (self-score ${w.self_score})` : ''}`).join('\n') + '\n\n'
+          : '') +
         (studyNotebook ? `YOUR STUDY NOTEBOOK SO FAR (your accumulated craft knowledge — build on it, don't re-derive it):\n${studyNotebook}\n\n` : '') +
         (actionHistory ? `YOUR RECENT ACTIONS AND THEIR FATES:\n${actionHistory}\n\n` : '') +
         `FRESH MATERIAL FROM THIS CYCLE'S CRAWL:\n${material || '(crawl came back empty)'}\n\n` +
