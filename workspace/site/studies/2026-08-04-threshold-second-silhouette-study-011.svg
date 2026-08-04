@@ -1,0 +1,64 @@
+<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 600' width='400' height='600'><rect width='400' height='600' fill='white'/>
+
+<!-- DASHED THRESHOLD LINE — bisects at pelvis zone, approximately y=340 -->
+<line x1='20' y1='340' x2='380' y2='340' stroke='#222' stroke-width='1.5' stroke-dasharray='10,7'/>
+
+<!-- HEAD — committed circle, filled, small -->
+<circle cx='200' cy='80' r='28' fill='none' stroke='#111' stroke-width='3' stroke-linecap='butt'/>
+
+<!-- NECK — short committed stroke -->
+<line x1='200' y1='108' x2='200' y2='130' stroke='#111' stroke-width='4' stroke-linecap='butt'/>
+
+<!-- SPINE — committed, heavy, vertical, blunt at both ends -->
+<line x1='200' y1='130' x2='200' y2='430' stroke='#111' stroke-width='5' stroke-linecap='butt'/>
+
+<!-- HIGH LEFT SHOULDER MASS — closed filled polygon, not a stroke -->
+<!-- This is the key fix: a filled shape that terminates at full weight -->
+<polygon points='200,130 160,140 145,155 148,175 168,185 200,180' fill='#111'/>
+
+<!-- SHOULDER CONTINUATION — filled wedge descending from shoulder mass -->
+<polygon points='148,155 135,175 130,205 140,220 158,215 168,185 148,175' fill='#111'/>
+
+<!-- LOW RIGHT SHOULDER — lighter, not filled, committed stroke only -->
+<line x1='200' y1='155' x2='248' y2='170' stroke='#111' stroke-width='3.5' stroke-linecap='butt'/>
+
+<!-- RIGHT ARM — downward vector, toward viewer side, blunt terminus -->
+<line x1='248' y1='170' x2='265' y2='280' stroke='#111' stroke-width='3' stroke-linecap='butt'/>
+<line x1='265' y1='280' x2='272' y2='310' stroke='#111' stroke-width='2.5' stroke-linecap='butt'/>
+
+<!-- LEFT ARM (beneath shoulder mass) — descends, gravity vector -->
+<line x1='138' y1='210' x2='128' y2='300' stroke='#111' stroke-width='3' stroke-linecap='butt'/>
+<line x1='128' y1='300' x2='122' y2='335' stroke='#111' stroke-width='2.5' stroke-linecap='butt'/>
+
+<!-- FEATHERED INTERIOR MARKS — short radiating strokes from spine, same stroke register -->
+<!-- These are final marks, not construction lines: same black, same weight family -->
+<line x1='200' y1='200' x2='215' y2='210' stroke='#111' stroke-width='2' stroke-linecap='butt'/>
+<line x1='200' y1='215' x2='218' y2='222' stroke='#111' stroke-width='2' stroke-linecap='butt'/>
+<line x1='200' y1='230' x2='216' y2='240' stroke='#111' stroke-width='2' stroke-linecap='butt'/>
+<line x1='200' y1='245' x2='214' y2='257' stroke='#111' stroke-width='1.5' stroke-linecap='butt'/>
+<line x1='200' y1='260' x2='212' y2='270' stroke='#111' stroke-width='1.5' stroke-linecap='butt'/>
+<line x1='200' y1='275' x2='211' y2='287' stroke='#111' stroke-width='1.5' stroke-linecap='butt'/>
+<!-- Shorter, sparser on left side of spine -->
+<line x1='200' y1='205' x2='186' y2='213' stroke='#111' stroke-width='1.5' stroke-linecap='butt'/>
+<line x1='200' y1='225' x2='185' y2='232' stroke='#111' stroke-width='1.5' stroke-linecap='butt'/>
+<line x1='200' y1='248' x2='186' y2='255' stroke='#111' stroke-width='1' stroke-linecap='butt'/>
+
+<!-- PELVIS ZONE — slight widening at threshold crossing, reinforces bisection -->
+<line x1='200' y1='340' x2='180' y2='355' stroke='#111' stroke-width='4' stroke-linecap='butt'/>
+<line x1='200' y1='340' x2='220' y2='355' stroke='#111' stroke-width='3.5' stroke-linecap='butt'/>
+
+<!-- LEFT LEG — below threshold -->
+<line x1='180' y1='355' x2='172' y2='480' stroke='#111' stroke-width='4' stroke-linecap='butt'/>
+<line x1='172' y1='480' x2='168' y2='540' stroke='#111' stroke-width='3.5' stroke-linecap='butt'/>
+<!-- Foot — blunt terminal -->
+<line x1='168' y1='540' x2='148' y2='548' stroke='#111' stroke-width='4' stroke-linecap='butt'/>
+
+<!-- RIGHT LEG — below threshold, slight 3/4 turn offset -->
+<line x1='220' y1='355' x2='228' y2='475' stroke='#111' stroke-width='3.5' stroke-linecap='butt'/>
+<line x1='228' y1='475' x2='232' y2='538' stroke='#111' stroke-width='3' stroke-linecap='butt'/>
+<!-- Foot -->
+<line x1='232' y1='538' x2='252' y2='545' stroke='#111' stroke-width='4' stroke-linecap='butt'/>
+
+<!-- ANNOTATION — minimal, describes principle tested -->
+<text x='18' y='570' font-family='monospace' font-size='10' fill='#555'>011 — filled shoulder mass / pelvis threshold / downward arm / same-register feather</text>
+</svg>
