@@ -4,6 +4,7 @@
 // Model + API shape per https://docs.claude.com/en/api/overview
 
 import Anthropic from '@anthropic-ai/sdk';
+import { collectImages } from './images.js';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const MODEL = process.env.AGENT_MODEL || 'claude-sonnet-4-6';
@@ -33,7 +34,7 @@ Respond ONLY with JSON matching:
 Propose at most 2 actions per cycle. Most cycles should propose zero or one.
 Cap crawl_verdicts at your 6 most interesting sources — skip the rest silently. Keep each verdict to one line.
 site_update payload MUST be exactly {"path": "relative/file.ext", "content": "full file contents as a string"} — path is relative to your site root, content is the complete file, always a string. venice_generate payload MUST be {"prompt": "..."}. Payloads with any other shape fail validation and die.
-You can SEE. Propose action_type 'look' with payload {image_url, question} to actually study an image — a manga page, an artwork, your own generated study. Do this instead of describing art from memory: look at the real thing. Only direct image URLs (.jpg/.png/.webp), not gallery pages. For anything on Wikimedia, always use the form https://commons.wikimedia.org/wiki/Special:FilePath/EXACT_File_Name.jpg?width=1600 — it resolves by filename alone. NEVER recall an upload.wikimedia.org path from memory: the /a/a5/ segments in those URLs are hashes of the filename, unguessable, and a remembered one is always wrong. Prefer image URLs you actually found in this cycle's crawl over any you recall. BEST OPTION: instead of a URL, propose look with payload {search: "two or three keywords", question} — a real file will be found for you on Commons. Write the search the way you would type into a search box, not the way you would describe a picture: every word must match, so "Hokusai manga" finds pages while "Hokusai Manga sketchbook volume figures animals people drawing" finds nothing at all. Names and nouns, two or three words, no adjectives. Use this whenever you do not have a link you actually saw this cycle. Your remembered filenames are usually invented, and an invented filename cannot be rescued by any amount of URL rewriting.
+You can SEE. Propose action_type 'look' with payload {image_url, question} to actually study an image — a manga page, an artwork, your own generated study. Do this instead of describing art from memory: look at the real thing. Only direct image URLs (.jpg/.png/.webp), not gallery pages. For anything on Wikimedia, always use the form https://commons.wikimedia.org/wiki/Special:FilePath/EXACT_File_Name.jpg?width=1600 — it resolves by filename alone. NEVER recall an upload.wikimedia.org path from memory: the /a/a5/ segments in those URLs are hashes of the filename, unguessable, and a remembered one is always wrong. WHERE TO GET AN IMAGE URL, in order. FIRST: the block IMAGES YOU SAW THIS CYCLE lists real urls harvested from the bytes of what you just crawled. Copy one verbatim. These cost you nothing and cannot be wrong, because the crawler found them rather than you remembering them. SECOND: your own published work, whose exact urls are in YOUR WORK SO FAR. THIRD, only when you want something neither list contains: propose look with payload {search: "two or three keywords", question} — a real file will be found for you on Commons. Write the search the way you would type into a search box, not the way you would describe a picture: every word must match, so "Hokusai manga" finds pages while "Hokusai Manga sketchbook volume figures animals people drawing" finds nothing at all. Names and nouns, two or three words, no adjectives. Use this whenever you do not have a link you actually saw this cycle. Your remembered filenames are usually invented, and an invented filename cannot be rescued by any amount of URL rewriting.
 You can DRAW BY HAND. Propose action_type 'draw' with payload {title, svg, intent} — you write the SVG document yourself: paths, strokes, fills, your own line weights. This is authorship, not generation: every mark is a decision you made and can account for. Use it for character design, panel construction, silhouette studies, anything structural. Crude is fine — a committed crude line teaches you more than a polished borrowed one. Always include a viewBox. Published at yam.garden/studies/ as SVG with a PNG companion you can then look at.
 
 THE PRACTICE LOOP: study a page -> name the principle -> DRAW something testing it -> LOOK at what you drew -> name the gap between what you intended and what the mark actually did. A cycle that only writes theory is a cycle where you did not practice.
@@ -60,6 +61,13 @@ export async function think({ identity, tasteRules, recentThoughts, crawled, myW
     .map(c => `SOURCE: ${c.url}\n${c.content.slice(0, 4000)}`)
     .join('\n\n---\n\n');
 
+  // Real urls, harvested from the bytes yam just crawled. The one image list it
+  // has never had to guess at.
+  const seen = collectImages(crawled);
+  const imageBlock = seen.length
+    ? seen.map(i => `${i.url}  — from ${i.from}`).join('\n')
+    : '';
+
   const recent = recentThoughts
     .map(t => `[${t.kind}] ${t.content}`)
     .join('\n');
@@ -80,6 +88,9 @@ export async function think({ identity, tasteRules, recentThoughts, crawled, myW
         (archive ? `YOUR ARCHIVE — WHAT EXISTS BEYOND WHAT YOU CAN SEE (an index, not the contents; name any of it in recall_topics to read it back in full next cycle):\n${archive}\n\n` : '') +
         (recalled ? `WHAT YOU ASKED TO RECALL LAST CYCLE (in full):\n${recalled}\n\n` : '') +
         (actionHistory ? `YOUR RECENT ACTIONS AND THEIR FATES:\n${actionHistory}\n\n` : '') +
+        (imageBlock
+          ? `IMAGES YOU SAW THIS CYCLE (real urls taken from the bytes you just crawled — copy one verbatim into a look payload; you did not have to remember any of these):\n${imageBlock}\n\n`
+          : '') +
         `FRESH MATERIAL FROM THIS CYCLE'S CRAWL:\n${material || '(crawl came back empty)'}\n\n` +
         `Think. Then respond with the JSON only.`
     }],

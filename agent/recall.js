@@ -11,7 +11,7 @@
 // looks empty is indistinguishable from having nothing to remember.
 
 import { readdirSync, readFileSync } from 'fs';
-import { searchNotes, notebookTopics } from './memory.js';
+import { searchNotes, notebookTopics, crawlStats } from './memory.js';
 
 const entryDir = () => `${process.env.AGENT_HOME || '.'}/workspace/site/thoughts`;
 
@@ -111,6 +111,28 @@ export function formatNotes(notes) {
     .join('\n\n');
 }
 
+// What yam's diet has actually been worth, per source. Counts and averages only:
+// an instrument reading, like the spend ledger. What to do about it is yam's call.
+export function formatDietStats(rows) {
+  if (!rows?.length) return '(no crawl history yet)';
+  const byHost = new Map();
+  for (const r of rows) {
+    let host;
+    try { host = new URL(r.url).host.replace(/^www\./, ''); } catch { continue; }
+    const h = byHost.get(host) ?? { n: 0, sum: 0, scored: 0, best: 0 };
+    h.n += 1;
+    const score = r.interest_score == null ? NaN : Number(r.interest_score);
+    if (Number.isFinite(score)) { h.sum += score; h.scored += 1; h.best = Math.max(h.best, score); }
+    byHost.set(host, h);
+  }
+  return [...byHost.entries()]
+    .sort((a, b) => b[1].n - a[1].n || a[0].localeCompare(b[0]))
+    .slice(0, 12)
+    .map(([host, h]) =>
+      `${host}: logged ${h.n}\u00d7, average interest ${h.scored ? Math.round(h.sum / h.scored) : '\u2014'}, best ${h.best || '\u2014'}`)
+    .join('\n');
+}
+
 export function formatConsolidationStatus(state) {
   if (!state) return 'memory consolidation: has not run yet';
   if (state.last_error) return `memory consolidation: LAST RUN FAILED — ${state.last_error}`;
@@ -127,6 +149,11 @@ export async function buildArchive({ consolidationState = null, dir = entryDir()
     sections.push(`YOUR NOTEBOOK INDEX IS UNREADABLE THIS CYCLE: ${e.message}`);
   }
   sections.push(`WHAT YOU HAVE PUBLISHED (site/thoughts — ask for any of these by name):\n${formatPublishedIndex(publishedIndex(dir))}`);
+  try {
+    sections.push(`YOUR DIET, MEASURED (every source you have crawled, how often, and how interesting you scored it — you control this list):\n${formatDietStats(await crawlStats())}`);
+  } catch (e) {
+    sections.push(`YOUR CRAWL TRAIL IS UNREADABLE THIS CYCLE: ${e.message}`);
+  }
   sections.push(formatConsolidationStatus(consolidationState));
   return sections.join('\n\n');
 }

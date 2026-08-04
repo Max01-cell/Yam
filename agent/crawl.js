@@ -2,6 +2,8 @@
 // v1: curated RSS/JSON feeds + any URLs the agent asked to revisit last cycle.
 // Deliberately simple: fetch, strip, truncate. The thinking happens in think.js.
 
+import { extractImages } from './images.js';
+
 export const DEFAULT_FEEDS = [
   'https://www.reddit.com/r/cinematography/.json?limit=10',
   'https://www.reddit.com/r/Simulated/.json?limit=10',
@@ -40,14 +42,20 @@ function stripToReadable(raw) {
     .slice(0, 8000);
 }
 
-// Returns [{ url, content }] — raw material for the mind.
+// Returns [{ url, content, images }] — raw material for the mind.
+// Images are harvested from the RAW bytes, before stripToReadable removes every
+// tag: that strip is why yam's diet has been text-only, and why its look action
+// has had to guess at URLs instead of using one it actually saw.
 export async function crawlCycle(extraUrls = [], feeds) {
   const targets = [...(feeds?.length ? feeds : DEFAULT_FEEDS), ...extraUrls.slice(0, 5)];
   const results = [];
   for (const url of targets) {
     const raw = await fetchText(url);
     if (!raw) continue;
-    results.push({ url, content: stripToReadable(raw) });
+    let images = [];
+    try { images = extractImages(raw, url); }
+    catch (e) { console.warn(`image harvest failed for ${url}: ${e.message}`); }
+    results.push({ url, content: stripToReadable(raw), images });
   }
   return results;
 }

@@ -17,6 +17,76 @@ function slugify(s) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'untitled';
 }
 
+// yam's own published work, as opposed to anything it found in the world.
+export function isOwnWork(url) {
+  return /^https?:\/\/(?:www\.)?yam\.garden\//i.test(String(url ?? ''));
+}
+
+// Inverse of the naming scheme above: recover a readable title from a published
+// study url, so a reading of that study can be filed under the work it is about.
+export function titleFromStudyUrl(url) {
+  const base = String(url || '').split(/[?#]/)[0].split('/').pop() || '';
+  return base
+    .replace(/\.(svg|png|jpe?g|webp)$/i, '')
+    .replace(/^\d{4}-\d{2}-\d{2}-/, '')
+    .replace(/-+/g, ' ')
+    .trim() || null;
+}
+
+// Instrument readings, not opinions. yam's written grammar is full of committed
+// versus feathered line register, spot blacks and screentone direction; whether
+// its hand actually executed any of that is a measurable fact about the document
+// it just authored, and it should not have to take anyone's word for it.
+export function measureSvg(svg) {
+  const s = String(svg ?? '');
+  const byTag = {};
+  const widths = [];
+  let marks = 0, filled = 0, solidBlack = 0, labels = 0;
+
+  // Per element, not global regexes: a caption's fill='#888' is not a filled
+  // mark, and counting it as one would misreport the drawing back to yam.
+  for (const m of s.matchAll(/<(path|line|circle|ellipse|rect|polygon|polyline|text|image)\b([^>]*)>/gi)) {
+    const tag = m[1].toLowerCase();
+    const attrs = m[2] ?? '';
+    byTag[tag] = (byTag[tag] ?? 0) + 1;
+    if (tag === 'text' || tag === 'image') { labels += 1; continue; }
+    marks += 1;
+
+    const w = Number((attrs.match(/\bstroke-width\s*[=:]\s*["']?\s*([\d.]+)/i) || [])[1]);
+    if (Number.isFinite(w) && w > 0) widths.push(w);
+
+    const f = (attrs.match(/\bfill\s*[=:]\s*["']?\s*([^"';\s>/]+)/i) || [])[1];
+    if (f) {
+      const v = f.toLowerCase();
+      if (v !== 'none' && v !== 'transparent') {
+        filled += 1;
+        if (v === 'black' || /^#(?:000|000000)$/i.test(v) || /^#(?:[0-3][0-9a-f]){3}$/i.test(v)) solidBlack += 1;
+      }
+    }
+  }
+
+  const distinct = [...new Set(widths)].sort((a, b) => a - b);
+  return {
+    elements: marks,
+    labels,
+    byTag,
+    strokeWidths: distinct,
+    strokeWidthRange: distinct.length ? `${distinct[0]}–${distinct[distinct.length - 1]}` : 'none declared',
+    strokeWidthRatio: distinct.length && distinct[0] > 0
+      ? Number((distinct[distinct.length - 1] / distinct[0]).toFixed(2)) : null,
+    filledElements: filled,
+    solidBlackFills: solidBlack,
+  };
+}
+
+export function summariseMeasurements(m) {
+  if (!m) return null;
+  return `${m.elements} elements; stroke-width ${m.strokeWidthRange}` +
+    `${m.strokeWidthRatio ? ` (heaviest ÷ lightest = ${m.strokeWidthRatio})` : ''}, ` +
+    `${m.strokeWidths.length} distinct weight${m.strokeWidths.length === 1 ? '' : 's'}; ` +
+    `${m.filledElements} filled, ${m.solidBlackFills} solid black`;
+}
+
 function validateSvg(svg) {
   if (typeof svg !== 'string') throw new Error('svg must be a string');
   const s = svg.trim();
@@ -80,11 +150,15 @@ export async function draw(cycleId, { title, svg, intent = '', selfScore = null 
     posted: false,
   });
 
+  const measurements = measureSvg(clean);
+
   return {
     published,
     title,
     svg: `https://yam.garden/${base}.svg`,
     png: rendered ? `https://yam.garden/${base}.png` : null,
+    measured: summariseMeasurements(measurements),
+    measurements,
     hint: rendered
       ? `to study your own hand, propose: look { image_url: "https://yam.garden/${base}.png" }`
       : 'png render unavailable this time; the svg is published',

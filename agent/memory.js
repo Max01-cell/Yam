@@ -79,7 +79,21 @@ export async function recentActions(limit = 5) {
     id: r.id, action_type: r.action_type, status: r.status,
     created_at: r.created_at, path: r.payload?.path,
     error: r.status === 'failed' ? String(r.result?.error ?? '').slice(0, 160) : null,
+    // Measurements of a drawing yam authored. Carried through so the feedback
+    // loop includes facts about the marks, not only yam's impression of them.
+    measured: r.result?.measured ? String(r.result.measured).slice(0, 200) : null,
   }));
+}
+
+// The crawl trail has been written every cycle since the schema went in and
+// never once read back. It is the only record of which sources actually earn
+// their place in the diet.
+export async function crawlStats(limit = 400) {
+  const { data, error } = await supabase.from('crawl_log')
+    .select('url, interest_score, created_at')
+    .order('created_at', { ascending: false }).limit(limit);
+  if (error) throw new Error(`crawl log read failed: ${error.message}`);
+  return data ?? [];
 }
 
 export async function autonomousPending(types) {

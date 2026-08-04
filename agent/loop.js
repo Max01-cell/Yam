@@ -37,7 +37,7 @@ async function runCycle() {
 
   const thoughts = await recentThoughts(WORKING_WINDOW);
   const actionHistory = (await recentActions(5))
-    .map(a => `#${a.id} ${a.action_type}${a.path ? ` ${a.path}` : ''} -> ${a.status}${a.error ? ` (${a.error})` : ''}`)
+    .map(a => `#${a.id} ${a.action_type}${a.path ? ` ${a.path}` : ''} -> ${a.status}${a.error ? ` (${a.error})` : ''}${a.measured ? `\n    what your marks measured: ${a.measured}` : ''}`)
     .join('\n');
   const studyNotebook = (await recentNotes(20))
     .map(n => `[${n.topic}${n.subject ? `/${n.subject}` : ''}] ${n.content}`)

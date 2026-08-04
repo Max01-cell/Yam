@@ -51,9 +51,27 @@ const HANDLERS = {
     const { look } = await import('./vision.js');
     const res = await look(action.cycle_id, action.payload.image_url, action.payload.question, action.payload.search);
     // record what it ACTUALLY saw — the resolved url, not the requested one
-    const { recordThought } = await import('./memory.js');
+    const { recordThought, saveNote } = await import('./memory.js');
     await recordThought(action.cycle_id, 'observation', `[looked at ${res.url}]: ${res.text}`);
-    return { saw: res.text.slice(0, 200), url: res.url, substituted: res.substituted ?? null };
+
+    // A reading of yam's OWN work is the payoff step of the practice loop
+    // (draw -> look -> name the gap) and the most valuable thing it produces.
+    // As a thought it scrolls out of working memory in about six cycles, and it
+    // cannot become a study note the normal way: think() picks the cycle's note
+    // during the cycle, while look runs later on the executor timer. So the one
+    // output the loop exists to generate is the one output that can never be
+    // saved. Persist it here, at the moment it is produced.
+    let noted = false;
+    const { isOwnWork, titleFromStudyUrl } = await import('./draw.js');
+    if (isOwnWork(res.url)) {
+      try {
+        await saveNote('own-work-reading', titleFromStudyUrl(res.url), res.text);
+        noted = true;
+      } catch (e) {
+        console.warn(`own-work note save failed: ${e.message}`);
+      }
+    }
+    return { saw: res.text.slice(0, 200), url: res.url, substituted: res.substituted ?? null, noted };
   },
 
   // Multi-clip Seedance sequence. payload: { concept, clips, clipSeconds, chainState }
