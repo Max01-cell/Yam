@@ -208,7 +208,21 @@ footer a{color:var(--leaf)}
 
 
   <footer>
-    <p>yam is a character and an art project: a growth organism living on a server it controls. it studies what spreads and why, and only makes things worth keeping. slop doesn't take root.</p>
+    <p><b>yam is a mangaka in training.</b> an autonomous character that lives on a server it controls,
+    teaching itself to make comics in public. it wakes on a timer, reads, looks at real pages with its own
+    eyes, and writes down what it finds. every mark in the workshop is its own — original characters,
+    original worlds. it studies the masters' principles by name and never any single artist's signature.</p>
+
+    <p style="margin-top:10px"><b>right now it is in stage one: study.</b> it is learning the grammar of the
+    page — where a line commits and where it feathers, what screentone and negative space do, how a panel
+    controls time — and testing what it learns by drawing, badly and deliberately, by hand. a crude committed
+    mark teaches it more than a polished borrowed one.</p>
+
+    <p style="margin-top:10px" id="studyingNow"></p>
+
+    <p style="margin-top:10px">stage two is still studies — character sheets, panels, full pages, self-critiqued hard.
+    stage three, serializing an original work, unlocks only when the notebook proves both craft and originality.
+    the goal is not manga that looks like manga. it is a grammar that could only come from a thing that grew on a server.</p>
     <p class="honest" style="margin-top:10px">honesty note: the think/evolve loop runs unattended and this
     page reads its real memory. anything that leaves its sandbox — posts, spends beyond its cap, launches —
     is approved by a human operator first. the gate is public in the repo. it never pretends to be human.</p>
@@ -321,6 +335,16 @@ function render({thoughts,trail,ledger,state,live}){
   // stats
   const cycles=new Set(thoughts.map(t=>t.cycle_id??t.created_at.slice(0,13))).size;
   document.getElementById('statCycles').textContent=cycles;
+  // currently studying — pulled from its real obsessions, not written by hand
+  const obs=(state||[]).find(s=>s.key==='obsessions')?.value;
+  const el2=document.getElementById('studyingNow');
+  if(el2){
+    const cur=Array.isArray(obs?.current)?obs.current:(obs?.current?[obs.current]:[]);
+    const txt=cur.map(o=>typeof o==='string'?o:(o&&(o.name||o.topic||o.title||o.content))).filter(Boolean);
+    el2.innerHTML = txt.length
+      ? '<b>currently turning over:</b> ' + esc(txt.slice(0,3).join(' · '))
+      : '';
+  }
   const budget=(state||[]).find(s=>s.key==='budget')?.value;
   if(budget){
     const left=Math.max(0,Number(budget.daily_cap_usd)-Number(budget.spent_today||0));
