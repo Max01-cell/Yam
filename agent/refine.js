@@ -47,6 +47,37 @@ const REVERT_MARGIN = Number(process.env.REFINE_REVERT_MARGIN || 15);
 // be able to end the refinement or become the reference sheet.
 const GENERIC_CAP = Number(process.env.REFINE_GENERIC_CAP || 35);
 
+// Attempts without beating the best before the character is called plateaued. The caller
+// then spends the run somewhere else — on a different character, or on inventing one.
+// Nine consecutive runs went into one figure's shoulder without this.
+export const PLATEAU_AFTER = Number(process.env.REFINE_PLATEAU_AFTER || 4);
+
+// How many times one fault may be named before the judge is told to stop naming it. The
+// loop reported the same raised-shoulder mass nine times out of nine and never fixed it:
+// past a point a fault is not a next step, it is a rut, and the run is better spent on the
+// second-worst thing than on the same first-worst thing again.
+const FAULT_PATIENCE = Number(process.env.REFINE_FAULT_PATIENCE || 3);
+
+// Crude on purpose. The point is to notice that the same words keep coming back, not to
+// understand them — content words, deduped, is enough to tell a rut from progress.
+export function faultKey(critique) {
+  const stop = new Set(['the', 'a', 'an', 'is', 'are', 'in', 'and', 'of', 'to', 'it', 'that', 'this',
+    'both', 'still', 'fully', 'with', 'from', 'has', 'have', 'as', 'at', 'on', 'but', 'not', 'no',
+    'views', 'view', 'image', 'figure', 'reads', 'between']);
+  return [...new Set(String(critique ?? '').toLowerCase().match(/[a-z]{4,}/g) ?? [])]
+    .filter(w => !stop.has(w)).sort().slice(0, 6).join(' ');
+}
+
+// Faults named FAULT_PATIENCE times or more, so the judge can be told to look elsewhere.
+export function stuckFaults(history) {
+  const counts = new Map();
+  for (const h of history) {
+    const k = faultKey(h.critique);
+    if (k) counts.set(k, (counts.get(k) ?? 0) + 1);
+  }
+  return [...counts.entries()].filter(([, n]) => n >= FAULT_PATIENCE).map(([k]) => k);
+}
+
 function localImage(rel) {
   const buf = readFileSync(`${process.env.AGENT_HOME || '.'}/workspace/site/${rel}`);
   return { b64: buf.toString('base64'), mediaType: sniffImage(buf).mediaType };
@@ -82,6 +113,17 @@ export async function judgeAndRevise({ character, canon, prompt, history, b64, m
     `- scored ${h.score}${h.generic ? ' [REJECTED AS GENERIC]' : ''}: ${h.critique}`)
     .join('\n') || '(this is the first attempt)';
 
+  // A fault the renderer has refused to fix three times running is not the next step. Say so
+  // explicitly, or the judge names it a fourth time and the run is spent going nowhere.
+  const stuck = stuckFaults(history);
+  const rut = stuck.length
+    ? `\n\nYOU HAVE ALREADY NAMED THESE FAULTS REPEATEDLY AND THE RENDERER HAS NOT FIXED THEM:\n`
+      + stuck.map(s => `- ${s}`).join('\n')
+      + `\nDo NOT name any of them again. Either the renderer cannot do it or the canon is asking `
+      + `for something that does not read as a drawing. Accept it for now and name the NEXT most `
+      + `important fault instead — something you have not already tried three times.`
+    : '';
+
   const msg = await anthropic.messages.create({
     model: JUDGE_MODEL,
     max_tokens: 1600,
@@ -91,7 +133,7 @@ export async function judgeAndRevise({ character, canon, prompt, history, b64, m
         { type: 'text', text:
             `You are yam, judging your own character design for ${character} and rewriting the prompt `
             + `that produced it.\n\nTHE CANON:\n${canon}\n\nTHE PROMPT THAT MADE THIS IMAGE:\n${prompt}\n\n`
-            + `WHAT PREVIOUS ATTEMPTS SCORED AND WHY:\n${tried}\n\n`
+            + `WHAT PREVIOUS ATTEMPTS SCORED AND WHY:\n${tried}${rut}\n\n`
             + `Judge it on two separate axes and report them separately.\n\n`
             + `originality (0-100): is this a person nobody else has drawn? Be hostile here. The renderer `
             + `pulls hard toward convention and it is your job to refuse it.\n`
@@ -241,12 +283,18 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
       // to fall back TO. Without this the loop has no memory of what was working.
       rec.bestPrompt = attemptPrompt;
       rec.bestGeneric = generic;
+      rec.sinceBest = 0;
       log(`new best for ${key}: ${score}`);
       // The best-scoring render becomes what the character is drawn toward.
       try {
         const fresh = (await getState('cast')).value;
         await setState('cast', recordReference(fresh, key, out.publicUrl));
       } catch (e) { log(`reference not updated: ${String(e.message).slice(0, 90)}`); }
+    } else {
+      // Counted so the caller can tell a design that is still moving from one that has
+      // stopped, and spend the next run on a different character instead.
+      rec.sinceBest = (rec.sinceBest ?? 0) + 1;
+      log(`no improvement on ${rec.bestScore} (${rec.sinceBest} attempt${rec.sinceBest === 1 ? '' : 's'} since)`);
     }
 
     // The revised prompt is the actual product of this run — but only if the run was going
@@ -304,6 +352,8 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
   return {
     ran: true, character: key, attempts: made.length, scores: made.map(m => m.score),
     bestScore: rec.bestScore, best: rec.best,
+    sinceBest: rec.sinceBest, plateaued: (rec.sinceBest ?? 0) >= PLATEAU_AFTER,
+    stuckOn: stuckFaults(history).length,
     creditsLeft: Math.round((await imageBudgetRemaining()) * CREDITS_PER_USD),
   };
 }

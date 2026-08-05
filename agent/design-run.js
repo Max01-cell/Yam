@@ -10,7 +10,8 @@
 
 import { imageBudgetRemaining, getState, CREDITS_PER_USD } from './memory.js';
 import { runDesignSession } from './design-session.js';
-import { runRefinement } from './refine.js';
+import { runRefinement, PLATEAU_AFTER } from './refine.js';
+import { inventCharacter, TARGET_CAST } from './invent.js';
 import { runHarvest, readLibrary } from './inspiration.js';
 import { veniceBalance } from './venice.js';
 
@@ -49,11 +50,31 @@ if (!entries.length) {
   process.exit(0);
 }
 
-// A character that has never been rendered gets the spread; everyone else gets refined.
+// Is anyone still moving? A character whose best score has not improved in PLATEAU_AFTER
+// attempts is not going to be rescued by one more render — that is how nine consecutive
+// runs went into one figure's shoulder. When everyone has stalled and the cast is small,
+// the honest use of a run is a NEW character rather than a tenth pass at the same one.
+const designLog = (await getState('design_log').catch(() => null))?.value ?? { characters: {} };
+const stalled = entries.every(([n]) => (designLog.characters?.[n]?.sinceBest ?? 0) >= PLATEAU_AFTER);
 const undesigned = entries.filter(([, c]) => !c?.reference).map(([n]) => n);
-const target = CHARACTER || undesigned[0] || null;
 
-if (undesigned.length && !CHARACTER) {
+for (const [n] of entries) {
+  const r = designLog.characters?.[n];
+  console.log(`[design-run]   ${n}: best ${r?.bestScore ?? '—'}, ${r?.sinceBest ?? 0} attempts since`);
+}
+
+if (!CHARACTER && entries.length < TARGET_CAST && (stalled || entries.length === 0)) {
+  console.log(`[design-run] every character has stalled and the cast holds ${entries.length}/${TARGET_CAST} — inventing`);
+  const inv = await inventCharacter({ reason: stalled ? 'all designs plateaued' : 'cast too small' });
+  console.log(`[design-run] ${JSON.stringify(inv)}`);
+  if (inv.ran) {
+    // Give the newcomer a first look immediately, so a run that invents still produces a
+    // drawing rather than only a paragraph.
+    const r = await runDesignSession({ character: inv.name, explore: 3, variations: 0 });
+    console.log(`[design-run] first sheets for ${inv.name}: ${JSON.stringify(r)}`);
+  }
+} else if (undesigned.length && !CHARACTER) {
+  const target = undesigned[0];
   console.log(`[design-run] ${target} has no reference sheet yet — running a converge session`);
   // Deliberately small. The old session spent twelve renders in one go; four explorations
   // is enough to pick a direction the refinement loop can then improve one step at a time.

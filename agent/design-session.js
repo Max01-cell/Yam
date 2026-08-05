@@ -79,10 +79,10 @@ const AXES = [
   'head: hair as a solid black mass with no interior detail',
   'head: head wrapped or hooded so the face is a dark void',
   'head: face fully visible, gaunt, heavy brow, mouth a single line',
-  'burden: something carried on the high shoulder, roped in place',
-  'burden: the high shoulder is empty — the body kept the shape after the load went',
+  'burden: something carried and roped in place, the body angled around its weight',
+  'burden: nothing carried — the hands are empty and the posture has nothing to brace against',
   'age: young, unfinished, limbs too long for the torso',
-  'age: old, compressed, the asymmetry now permanent in the spine',
+  'age: old, compressed, the spine settled into a permanent curve',
 ];
 
 // The brief asks for a FINISHED character design, not for ink line art. The old one asked
