@@ -23,6 +23,7 @@ import {
 import { generateImage, sniffImage, veniceBalance } from './venice.js';
 import { recordReference, normaliseName, mergeCast } from './cast.js';
 import { DESIGN_MODEL, DESIGN_PRESET, NEGATIVE, IMAGE_COST } from './design-session.js';
+import { readLibrary, pickInspiration, markUsed, inspirationClause } from './inspiration.js';
 import { readFileSync } from 'fs';
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -140,6 +141,13 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
       break;
     }
 
+    // One borrowed idea per attempt, appended rather than folded in, so the judge can see
+    // it as an addition and the score says something about that idea specifically.
+    const inspiration = pickInspiration(await readLibrary());
+    const clause = inspirationClause(inspiration, history.length);
+    const attemptPrompt = clause ? `${prompt}${clause}` : prompt;
+    if (clause) log(`trying a ${inspiration.kind} reference —${clause.slice(0, 90)}`);
+
     const sessionId = randomUUID();
     // Seconds AND a random suffix. An HH:MM stamp collided the first time two runs happened
     // in the same minute: the second render overwrote the first one's bytes on disk while
@@ -149,7 +157,7 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
       + '-' + sessionId.slice(0, 4);
     let out;
     try {
-      out = await generateImage(sessionId, prompt, {
+      out = await generateImage(sessionId, attemptPrompt, {
         model: DESIGN_MODEL, stylePreset: DESIGN_PRESET, negativePrompt: NEGATIVE,
         seed: entry.seed, width: 1024, height: 1024, cost: IMAGE_COST,
         label: `${key}-refine-${stamp}`,
@@ -163,7 +171,7 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
     let verdict;
     try {
       const { parsed } = await judgeAndRevise({
-        character: key, canon, prompt, history, ...localImage(out.rel),
+        character: key, canon, prompt: attemptPrompt, history, ...localImage(out.rel),
       });
       verdict = parsed;
     } catch (e) {
@@ -176,7 +184,15 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
     try { await scoreCreation(out.creationId, score); }
     catch (e) { log(`score not written: ${String(e.message).slice(0, 90)}`); }
 
-    history.push({ at: new Date().toISOString(), prompt, score, critique: String(verdict.critique ?? '').slice(0, 300), url: out.publicUrl });
+    // The prompt recorded is the one that was actually sent, borrowed clause included —
+    // storing the un-inspired version would leave the history claiming a score for a
+    // prompt that never rendered anything.
+    history.push({
+      at: new Date().toISOString(), prompt: attemptPrompt, score,
+      critique: String(verdict.critique ?? '').slice(0, 300), url: out.publicUrl,
+      inspiration: inspiration ? { kind: inspiration.kind, clause: clause.trim() } : null,
+    });
+    await markUsed(inspiration).catch(() => {});
     made.push({ url: out.publicUrl, score });
     log(`attempt scored ${score} — ${String(verdict.critique ?? '').slice(0, 100)}`);
 

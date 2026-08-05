@@ -11,6 +11,7 @@
 import { imageBudgetRemaining, getState, CREDITS_PER_USD } from './memory.js';
 import { runDesignSession } from './design-session.js';
 import { runRefinement } from './refine.js';
+import { runHarvest, readLibrary } from './inspiration.js';
 import { veniceBalance } from './venice.js';
 
 const CHARACTER = process.env.DESIGN_CHARACTER || null;
@@ -29,6 +30,17 @@ try {
 }
 
 console.log(`[design-run] ${await credits()} of today's credits left`);
+
+// Look at the world before drawing. Costs no Venice credits — it is a vision call against
+// the thinking budget — and it is what stops the design vocabulary being the same twelve
+// hardcoded strings forever.
+try {
+  const h = await runHarvest({ want: 2 });
+  const lib = await readLibrary();
+  console.log(`[design-run] inspiration: ${JSON.stringify(h)} · library holds ${lib.items?.length ?? 0}`);
+} catch (e) {
+  console.log(`[design-run] harvest skipped: ${String(e.message).slice(0, 120)}`);
+}
 
 const cast = (await getState('cast').catch(() => null))?.value ?? null;
 const entries = Object.entries(cast?.characters ?? {});
