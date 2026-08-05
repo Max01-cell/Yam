@@ -53,11 +53,19 @@ const FLOOR = Number(process.env.DESIGN_BUDGET_FLOOR || 0);
 // The first half of this list is new and is the half that matters. The old negative
 // defended only against genericness and colour, and said nothing at all against CRUDENESS —
 // so a scratchy unfinished doodle satisfied every clause in it and got published.
-export const NEGATIVE = 'crude sketch, scribble, rough doodle, unfinished, stick figure, childlike drawing, '
+// The genericness clauses come first because that is the failure that actually kept
+// happening: the old list said 'existing anime character' and 'generic handsome man' and
+// nothing about the FACE, which is where a stock protagonist lives. A render can satisfy
+// every clause about costume and still come back as the same beautiful anime lead.
+export const NEGATIVE = 'anime protagonist face, bishonen, shonen hero, handsome anime man, pretty anime boy, '
+  + 'large glossy anime eyes, sparkling eyes, idealised symmetrical face, model good looks, '
+  + 'generic anime lead, stock character, light novel cover art, visual novel character, '
+  + 'existing anime character, recognisable franchise character, cosplay, '
+  + 'crude sketch, scribble, rough doodle, unfinished, stick figure, childlike drawing, '
   + 'messy scratchy linework, amateur, low detail, sloppy proportions, '
   + 'colour, color, coloured, painted, photo, 3d render, background scenery, gradient, '
   + 'spiky anime hair, martial arts uniform, orange gi, superhero costume, armour, cape, bodybuilder, '
-  + 'existing anime character, recognisable franchise character, logo, emblem, watermark, signature, text, '
+  + 'logo, emblem, watermark, signature, text, '
   + 'multiple unrelated characters, cute chibi, generic handsome man, t-shirt and jeans';
 
 // The axes a character can differ along. Exploring along named axes beats asking for

@@ -42,6 +42,11 @@ const GOOD_ENOUGH = Number(process.env.REFINE_GOOD_ENOUGH || 92);
 // on every small dip would freeze the design at whatever got lucky first.
 const REVERT_MARGIN = Number(process.env.REFINE_REVERT_MARGIN || 15);
 
+// The ceiling a design reading as a stock anime figure cannot rise above, however well it
+// is rendered. Below GOOD_ENOUGH by a wide margin on purpose: a generic result must never
+// be able to end the refinement or become the reference sheet.
+const GENERIC_CAP = Number(process.env.REFINE_GENERIC_CAP || 35);
+
 function localImage(rel) {
   const buf = readFileSync(`${process.env.AGENT_HOME || '.'}/workspace/site/${rel}`);
   return { b64: buf.toString('base64'), mediaType: sniffImage(buf).mediaType };
@@ -74,7 +79,8 @@ function seedPrompt(entry) {
 // critique: the output feeds straight back into the next generation.
 export async function judgeAndRevise({ character, canon, prompt, history, b64, mediaType }) {
   const tried = history.slice(-6).map(h =>
-    `- scored ${h.score}: ${h.critique}`).join('\n') || '(this is the first attempt)';
+    `- scored ${h.score}${h.generic ? ' [REJECTED AS GENERIC]' : ''}: ${h.critique}`)
+    .join('\n') || '(this is the first attempt)';
 
   const msg = await anthropic.messages.create({
     model: JUDGE_MODEL,
@@ -86,14 +92,26 @@ export async function judgeAndRevise({ character, canon, prompt, history, b64, m
             `You are yam, judging your own character design for ${character} and rewriting the prompt `
             + `that produced it.\n\nTHE CANON:\n${canon}\n\nTHE PROMPT THAT MADE THIS IMAGE:\n${prompt}\n\n`
             + `WHAT PREVIOUS ATTEMPTS SCORED AND WHY:\n${tried}\n\n`
-            + `Score this image 0-100 on two things weighted equally: is it a person nobody else has `
-            + `drawn, and is it finished enough to draw a comic from. A generic anime lead is a failure `
-            + `however well rendered; so is an original silhouette that is only a scratchy sketch.\n\n`
+            + `Judge it on two separate axes and report them separately.\n\n`
+            + `originality (0-100): is this a person nobody else has drawn? Be hostile here. The renderer `
+            + `pulls hard toward convention and it is your job to refuse it.\n`
+            + `finish (0-100): is it resolved enough to draw a comic from — costume construction, `
+            + `anatomy, line weight, blacks — or is it a scratchy unfinished sketch?\n\n`
+            + `Then answer one question with a plain boolean. generic: does this read as a STOCK ANIME `
+            + `FIGURE rather than a specific invented person? Answer true if any of these are true — a `
+            + `conventionally handsome or pretty anime protagonist face; large glossy anime eyes; the `
+            + `default bishonen or shonen-hero head; idealised symmetrical features; a face and body you `
+            + `have seen on a hundred covers; or anything traceable to an existing franchise character. `
+            + `Rendering quality is NOT a defence. A beautifully drawn stock protagonist is the exact `
+            + `failure this project exists to avoid, and calling it original because the linework is good `
+            + `is the mistake you must not make. When you are unsure, answer true.\n\n`
             + `Then name the SINGLE weakest thing about it — one specific fixable fault, not a list — `
             + `and rewrite the prompt to fix that one thing while keeping everything that is working. `
-            + `Change one thing at a time. A rewrite that changes everything teaches you nothing about `
-            + `what the change did.\n\n`
-            + `Return ONLY JSON: {"score":0,"critique":"the one weakest thing","revised_prompt":"...","what_changed":"one line"}` },
+            + `If generic is true, the single weakest thing IS the genericness, and the rewrite must `
+            + `attack the face and the proportions specifically: name what is odd about THIS person's `
+            + `skull, features and build in a way no stock character shares.\n\n`
+            + `Return ONLY JSON: {"originality":0,"finish":0,"generic":false,"generic_reason":"one line or empty",`
+            + `"critique":"the one weakest thing","revised_prompt":"...","what_changed":"one line"}` },
         { type: 'image', source: { type: 'base64', media_type: mediaType || 'image/png', data: b64 } },
       ],
     }],
@@ -186,7 +204,19 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
       break;
     }
 
-    const score = Math.max(0, Math.min(100, Number(verdict.score) || 0));
+    // The gate is applied HERE, in code, not asked for in the prompt. A judge told to score
+    // a stock protagonist harshly will still hand it a 61 because the linework is genuinely
+    // good — the two axes get averaged in its head and originality quietly loses. Separating
+    // the axes and capping mechanically is the difference between a rule and a request.
+    const clamp = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+    const originality = clamp(verdict.originality);
+    const finish = clamp(verdict.finish);
+    const generic = verdict.generic === true;
+    let score = Math.round((originality + finish) / 2);
+    if (generic) {
+      score = Math.min(score, GENERIC_CAP);
+      log(`GENERIC — capped at ${score}: ${String(verdict.generic_reason ?? '').slice(0, 110)}`);
+    }
     // The score goes onto the picture, so the site shows what yam thought of it.
     try { await scoreCreation(out.creationId, score); }
     catch (e) { log(`score not written: ${String(e.message).slice(0, 90)}`); }
@@ -196,6 +226,7 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
     // prompt that never rendered anything.
     history.push({
       at: new Date().toISOString(), prompt: attemptPrompt, score,
+      originality, finish, generic,
       critique: String(verdict.critique ?? '').slice(0, 300), url: out.publicUrl,
       inspiration: inspiration ? { kind: inspiration.kind, clause: clause.trim() } : null,
     });
@@ -209,6 +240,7 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
       // The prompt that earned the best score, kept verbatim so a cold branch has somewhere
       // to fall back TO. Without this the loop has no memory of what was working.
       rec.bestPrompt = attemptPrompt;
+      rec.bestGeneric = generic;
       log(`new best for ${key}: ${score}`);
       // The best-scoring render becomes what the character is drawn toward.
       try {
@@ -223,10 +255,16 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
     // result: 31, 52, 61, then 31 again, each drop inherited by the run after it. A revision
     // is a hypothesis. Keep it while it holds up, and fall back to the best prompt when a
     // branch has clearly gone cold.
-    const cold = score < (rec.bestScore ?? 0) - REVERT_MARGIN;
+    // A generic result is always a cold branch, whatever it scored against the best. It is
+    // the one failure mode this project cannot ship, so its prompt does not get to become
+    // the base for the next attempt — unless the recorded best was itself generic, in which
+    // case there is nothing better to fall back to and iterating forward is the only move.
+    const cold = generic ? !rec.bestGeneric : score < (rec.bestScore ?? 0) - REVERT_MARGIN;
     if (cold && rec.bestPrompt) {
       prompt = rec.bestPrompt;
-      log(`scored ${score} against a best of ${rec.bestScore} — reverting to the best prompt`);
+      log(generic
+        ? `generic result — reverting to the best non-generic prompt (${rec.bestScore})`
+        : `scored ${score} against a best of ${rec.bestScore} — reverting to the best prompt`);
     } else if (verdict.revised_prompt && String(verdict.revised_prompt).length > 40) {
       prompt = String(verdict.revised_prompt).slice(0, 2000);
       log(`prompt revised: ${String(verdict.what_changed ?? '').slice(0, 90)}`);
