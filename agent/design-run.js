@@ -63,9 +63,17 @@ for (const [n] of entries) {
   console.log(`[design-run]   ${n}: best ${r?.bestScore ?? '—'}, ${r?.sinceBest ?? 0} attempts since`);
 }
 
-if (!CHARACTER && entries.length < TARGET_CAST && (stalled || entries.length === 0)) {
-  console.log(`[design-run] every character has stalled and the cast holds ${entries.length}/${TARGET_CAST} — inventing`);
-  const inv = await inventCharacter({ reason: stalled ? 'all designs plateaued' : 'cast too small' });
+// Below MIN_CAST, invent regardless of whether anything has stalled. Waiting for a plateau
+// keeps a cast of one at one indefinitely — a design that is still improving never triggers
+// it, and the whole complaint is that every drawing is the same person. Past MIN_CAST,
+// stalling is the trigger and refinement gets the runs.
+const MIN_CAST = Number(process.env.MIN_CAST || 3);
+if (!CHARACTER && entries.length < TARGET_CAST && (stalled || entries.length < MIN_CAST)) {
+  const why = entries.length < MIN_CAST
+    ? `the cast holds ${entries.length}, which is not yet a cast`
+    : 'every character has stalled';
+  console.log(`[design-run] ${why} — inventing`);
+  const inv = await inventCharacter({ reason: why });
   console.log(`[design-run] ${JSON.stringify(inv)}`);
   if (inv.ran) {
     // Give the newcomer a first look immediately, so a run that invents still produces a
