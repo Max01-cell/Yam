@@ -37,6 +37,11 @@ const ATTEMPTS = Number(process.env.REFINE_ATTEMPTS || 1);
 // Kept below 100 on purpose — chasing the last few points burns credits on noise.
 const GOOD_ENOUGH = Number(process.env.REFINE_GOOD_ENOUGH || 92);
 
+// How far below the best a run may score before its prompt is abandoned. Generous, because
+// the renderer is stochastic: the same prompt does not score the same twice, and reverting
+// on every small dip would freeze the design at whatever got lucky first.
+const REVERT_MARGIN = Number(process.env.REFINE_REVERT_MARGIN || 15);
+
 function localImage(rel) {
   const buf = readFileSync(`${process.env.AGENT_HOME || '.'}/workspace/site/${rel}`);
   return { b64: buf.toString('base64'), mediaType: sniffImage(buf).mediaType };
@@ -129,7 +134,9 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
   }
 
   const canon = `${entry.canon}\n\nOpen questions: ${(entry.open_questions ?? []).join(' | ')}`;
-  let prompt = rec.prompt || seedPrompt(entry);
+  // Start from the working candidate, but never from something already known to be worse
+  // than the best: a run that ended cold left its own fallback behind for this one.
+  let prompt = rec.prompt || rec.bestPrompt || seedPrompt(entry);
   const history = [...(rec.history ?? [])];
   const made = [];
 
@@ -199,6 +206,9 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
     if (score > (rec.bestScore ?? -1)) {
       rec.bestScore = score;
       rec.best = out.publicUrl;
+      // The prompt that earned the best score, kept verbatim so a cold branch has somewhere
+      // to fall back TO. Without this the loop has no memory of what was working.
+      rec.bestPrompt = attemptPrompt;
       log(`new best for ${key}: ${score}`);
       // The best-scoring render becomes what the character is drawn toward.
       try {
@@ -207,8 +217,17 @@ export async function runRefinement({ character = null, attempts = ATTEMPTS } = 
       } catch (e) { log(`reference not updated: ${String(e.message).slice(0, 90)}`); }
     }
 
-    // The revised prompt is the actual product of this run.
-    if (verdict.revised_prompt && String(verdict.revised_prompt).length > 40) {
+    // The revised prompt is the actual product of this run — but only if the run was going
+    // anywhere. Adopting every rewrite unconditionally means a revision that SCORED WORSE
+    // still becomes the base for the next one, and the loop wanders away from its own best
+    // result: 31, 52, 61, then 31 again, each drop inherited by the run after it. A revision
+    // is a hypothesis. Keep it while it holds up, and fall back to the best prompt when a
+    // branch has clearly gone cold.
+    const cold = score < (rec.bestScore ?? 0) - REVERT_MARGIN;
+    if (cold && rec.bestPrompt) {
+      prompt = rec.bestPrompt;
+      log(`scored ${score} against a best of ${rec.bestScore} — reverting to the best prompt`);
+    } else if (verdict.revised_prompt && String(verdict.revised_prompt).length > 40) {
       prompt = String(verdict.revised_prompt).slice(0, 2000);
       log(`prompt revised: ${String(verdict.what_changed ?? '').slice(0, 90)}`);
     }
